@@ -1,3 +1,4 @@
+gradio
 sentence-transformers
 faiss-cpu
 pandas
