@@ -1,7 +1,7 @@
 # src/data_loader.py
 import json
 import pandas as pd
-from config import JSON_PATH, CHUNK_SIZE, OVERLAP
+from .config import JSON_PATH, CHUNK_SIZE, OVERLAP
 from typing import List
 
 
