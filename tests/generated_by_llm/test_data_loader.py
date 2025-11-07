@@ -1,7 +1,8 @@
 # tests/data_loader_test.py
 import pytest
+import pandas as pd
 from src.data_loader import load_json_to_dataframe, chunk_text, preprocess_documents
-from config import JSON_PATH, CHUNK_SIZE, OVERLAP
+from src.config import JSON_PATH, CHUNK_SIZE, OVERLAP
 from typing import List
 
 @pytest.fixture
