@@ -1,0 +1,427 @@
+name: 🧠 LLM Test Generator
+
+on:
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      target_files:
+        description: "Specific files to generate tests for (comma-separated, optional)"
+        required: false
+        type: string
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - '**/*.py'
+      - 'src/**'
+      - 'code/**'
+  pull_request:
+    branches: [ main, master, develop ]
+    paths:
+      - '**/*.py'
+      - 'src/**'
+      - 'code/**'
+
+jobs:
+  generate-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better context
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Base Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests json5 pathlib
+
+      - name: Detect Python Changes
+        id: changes
+        run: |
+          echo "🔍 Detecting Python file changes..."
+          if git diff --name-only HEAD~1 HEAD | grep -E '\.(py)$' || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "has_python_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Python changes detected or manual trigger"
+          else
+            echo "has_python_changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No Python changes detected"
+          fi
+
+      - name: Build Context Bundle
+        if: steps.changes.outputs.has_python_changes == 'true'
+        run: |
+          echo "📦 Building comprehensive context bundle..."
+          mkdir -p ci_artifacts
+          
+          # Create embedded context builder
+          cat > build_context.py << 'EOF'
+          import os
+          import json
+          import subprocess
+          from pathlib import Path
+
+          def get_git_info():
+              try:
+                  branch = subprocess.check_output(['git', 'branch', '--show-current'], text=True).strip()
+                  commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()[:8]
+                  return {"branch": branch, "commit": commit}
+              except:
+                  return {"branch": "unknown", "commit": "unknown"}
+
+          def analyze_repository():
+              context = {
+                  "repository_info": get_git_info(),
+                  "files": [],
+                  "structure": {},
+                  "metadata": {"total_files": 0, "changed_files": 0}
+              }
+              
+              # Get changed files
+              try:
+                  changed_files = subprocess.check_output(
+                      ['git', 'diff', '--name-only', 'HEAD~1', 'HEAD'], 
+                      text=True
+                  ).strip().split('\n')
+                  changed_files = [f for f in changed_files if f.endswith('.py')]
+              except:
+                  changed_files = []
+              
+              # Find all Python files
+              python_files = []
+              for root, dirs, files in os.walk('.'):
+                  # Skip hidden directories and common ignore patterns
+                  dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['__pycache__', 'node_modules']]
+                  
+                  for file in files:
+                      if file.endswith('.py'):
+                          filepath = os.path.join(root, file)
+                          python_files.append(filepath)
+              
+              # Process files
+              for filepath in python_files:
+                  try:
+                      with open(filepath, 'r', encoding='utf-8') as f:
+                          content = f.read()
+                      
+                      file_info = {
+                          "path": filepath,
+                          "content": content,
+                          "size": len(content),
+                          "lines": len(content.split('\n')),
+                          "is_changed": filepath in changed_files
+                      }
+                      context["files"].append(file_info)
+                      
+                      if filepath in changed_files:
+                          context["metadata"]["changed_files"] += 1
+                          
+                  except Exception as e:
+                      print(f"Warning: Could not read {filepath}: {e}")
+              
+              context["metadata"]["total_files"] = len(context["files"])
+              return context
+
+          if __name__ == "__main__":
+              context = analyze_repository()
+              with open('ci_artifacts/context_bundle.json', 'w') as f:
+                  json.dump(context, f, indent=2)
+              
+              print(f"✅ Context bundle created:")
+              print(f"   - Total files: {context['metadata']['total_files']}")
+              print(f"   - Changed files: {context['metadata']['changed_files']}")
+          EOF
+          
+          python build_context.py
+
+      - name: Install Ollama
+        if: steps.changes.outputs.has_python_changes == 'true'
+        run: |
+          echo "🤖 Installing Ollama..."
+          curl -fsSL https://ollama.com/install.sh | sh
+          
+          # Start Ollama in background
+          ollama serve &
+          sleep 10
+          
+          # Pull the model
+          echo "📦 Pulling Qwen2.5-Coder model..."
+          ollama pull qwen2.5-coder:1.5b
+          
+          # Verify installation
+          ollama list
+
+      - name: Generate Tests with LLM
+        if: steps.changes.outputs.has_python_changes == 'true'
+        env:
+          OLLAMA_MODEL: "qwen2.5-coder:1.5b"
+          OLLAMA_HOST: "http://localhost:11434"
+        run: |
+          echo "🧠 Generating comprehensive test suite with LLM..."
+          
+          # Create embedded test generator
+          cat > generate_tests.py << 'EOF'
+          import json
+          import requests
+          import os
+          from pathlib import Path
+
+          def call_ollama(prompt, model="qwen2.5-coder:1.5b"):
+              try:
+                  response = requests.post(
+                      "http://localhost:11434/api/generate",
+                      json={
+                          "model": model,
+                          "prompt": prompt,
+                          "stream": False,
+                          "options": {
+                              "temperature": 0.7,
+                              "top_p": 0.9,
+                              "max_tokens": 2000
+                          }
+                      },
+                      timeout=120
+                  )
+                  
+                  if response.status_code == 200:
+                      return response.json().get("response", "")
+                  else:
+                      print(f"Ollama API error: {response.status_code}")
+                      return None
+              except Exception as e:
+                  print(f"Error calling Ollama: {e}")
+                  return None
+
+          def generate_test_for_file(file_info, context_summary):
+              prompt = f"""Generate pytest test code for this Python file. Return ONLY executable Python code with no explanations or markdown.
+
+          FILE: {file_info['path']}
+          ```python
+          {file_info['content']}
+          ```
+
+          Requirements:
+          - Import pytest and required modules
+          - Test all functions and classes
+          - Use mock for external dependencies  
+          - Include edge cases and error handling
+          - Use descriptive test function names
+
+          Return complete Python test file (no explanations, no markdown, no comments about the code):"""
+              
+              response = call_ollama(prompt)
+              if response:
+                  # Advanced response parsing to extract only Python code
+                  lines = response.split('\n')
+                  code_lines = []
+                  in_code_block = False
+                  found_python_code = False
+                  
+                  for line in lines:
+                      stripped = line.strip()
+                      
+                      # Handle code blocks
+                      if stripped.startswith('```python') or stripped.startswith('```Python'):
+                          in_code_block = True
+                          continue
+                      elif stripped.startswith('```') and in_code_block:
+                          in_code_block = False
+                          continue
+                      
+                      # Skip explanatory text patterns
+                      if any(pattern in stripped for pattern in [
+                          '**', '##', '1.', '2.', '3.', '4.', '5.',
+                          'Here', 'This', 'The test', 'These tests',
+                          'Note:', 'Important:', 'Key points:',
+                          'Explanation:', 'Summary:'
+                      ]):
+                          continue
+                      
+                      # Identify valid Python code lines
+                      if (in_code_block or 
+                          stripped.startswith(('import ', 'from ', 'def ', 'class ', '@', 'if __name__')) or
+                          (found_python_code and (stripped.startswith(' ') or stripped == '' or 
+                           stripped.startswith(('assert', 'return', 'with', 'for', 'while', 'if', 'elif', 'else', 'try', 'except', 'finally'))))):
+                          
+                          if stripped.startswith(('import ', 'from ', 'def ', 'class ')):
+                              found_python_code = True
+                          
+                          code_lines.append(line)
+                  
+                  result = '\n'.join(code_lines).strip()
+                  
+                  # Additional cleanup and validation
+                  if result:
+                      # Ensure basic imports are present
+                      if 'import pytest' not in result:
+                          result = 'import pytest\n' + result
+                      
+                      # Basic syntax validation
+                      try:
+                          compile(result, '<generated_test>', 'exec')
+                          return result
+                      except SyntaxError as e:
+                          print(f"⚠️ Syntax error in generated code: {e}")
+                          # Try to fix common issues
+                          result = result.replace('from src.version.py import', 'from src.version import')
+                          try:
+                              compile(result, '<generated_test>', 'exec')
+                              return result
+                          except:
+                              print(f"❌ Could not fix syntax errors")
+                              return None
+                  
+              return None
+
+          def main():
+              # Load context
+              with open('ci_artifacts/context_bundle.json', 'r') as f:
+                  context = json.load(f)
+              
+              # Create output directory
+              Path("tests/generated_by_llm").mkdir(parents=True, exist_ok=True)
+              
+              generated_count = 0
+              
+              # Process files (prioritize changed files)
+              files_to_process = [f for f in context['files'] if f['is_changed']] or context['files'][:10]
+              
+              for file_info in files_to_process:
+                  if file_info['path'].startswith('./tests') or 'test_' in file_info['path']:
+                      continue  # Skip existing test files
+                  
+                  print(f"🔬 Generating tests for: {file_info['path']}")
+                  
+                  test_code = generate_test_for_file(file_info, context['metadata'])
+                  
+                  if test_code and len(test_code.strip()) > 100:
+                      # Create test file name
+                      test_filename = f"test_{Path(file_info['path']).stem}.py"
+                      test_path = f"tests/generated_by_llm/{test_filename}"
+                      
+                      with open(test_path, 'w') as f:
+                          f.write(test_code)
+                      
+                      generated_count += 1
+                      print(f"✅ Generated: {test_path}")
+                  else:
+                      print(f"⚠️ Failed to generate test for: {file_info['path']}")
+              
+              print(f"\n🎉 Generated {generated_count} test files")
+              
+              # Create summary
+              summary = {
+                  "generated_count": generated_count,
+                  "files_processed": len(files_to_process),
+                  "output_directory": "tests/generated_by_llm",
+                  "model_used": "qwen2.5-coder:1.5b"
+              }
+              
+              with open('ci_artifacts/generation_summary.json', 'w') as f:
+                  json.dump(summary, f, indent=2)
+
+          if __name__ == "__main__":
+              main()
+          EOF
+          
+          python generate_tests.py
+
+      - name: Package Generated Tests
+        if: steps.changes.outputs.has_python_changes == 'true'
+        run: |
+          echo "📦 Packaging generated tests and context..."
+          
+          # Create comprehensive artifact bundle
+          mkdir -p test_generation_artifacts
+          
+          # Copy generated tests
+          if [ -d "tests/generated_by_llm" ]; then
+            cp -r tests/generated_by_llm test_generation_artifacts/
+            echo "✅ Copied generated test files"
+          fi
+          
+          # Copy context and metadata
+          cp ci_artifacts/*.json test_generation_artifacts/
+          
+          # Create README for the artifacts
+          cat > test_generation_artifacts/README.md << EOF
+          # LLM Generated Test Cases
+          
+          Generated on: $(date)
+          Model: Qwen2.5-Coder 1.5B
+          
+          ## Contents:
+          - \`generated_by_llm/\` - All generated test files
+          - \`context_bundle.json\` - Repository analysis used for generation
+          - \`generation_summary.json\` - Generation statistics
+          
+          ## Next Steps:
+          1. Download and review the generated test files
+          2. Validate the test logic and adjust imports if needed
+          3. Copy approved tests to your repository's test directory
+          4. Run the tests using the Test Runner workflow
+          
+          ## Usage:
+          \`\`\`bash
+          # Copy tests to your repo
+          cp generated_by_llm/* your_repo/tests/
+          
+          # Run tests locally
+          pytest tests/ --cov=your_source_directory
+          \`\`\`
+          EOF
+
+      - name: Upload Test Generation Artifacts
+        if: steps.changes.outputs.has_python_changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-generated-tests
+          path: test_generation_artifacts/
+          retention-days: 30
+
+      - name: Create Generation Summary
+        run: |
+          echo "## 🧠 LLM Test Generation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.changes.outputs.has_python_changes }}" = "true" ]; then
+            if [ -f "ci_artifacts/generation_summary.json" ]; then
+              GENERATED_COUNT=$(python -c "import json; print(json.load(open('ci_artifacts/generation_summary.json'))['generated_count'])" 2>/dev/null || echo "0")
+              FILES_PROCESSED=$(python -c "import json; print(json.load(open('ci_artifacts/generation_summary.json'))['files_processed'])" 2>/dev/null || echo "0")
+              
+              echo "### 📊 Generation Statistics" >> $GITHUB_STEP_SUMMARY
+              echo "- **Generated test files:** $GENERATED_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "- **Source files analyzed:** $FILES_PROCESSED" >> $GITHUB_STEP_SUMMARY
+              echo "- **Model used:** Qwen2.5-Coder 1.5B" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              if [ "$GENERATED_COUNT" -gt 0 ]; then
+                echo "### ✅ Success!" >> $GITHUB_STEP_SUMMARY
+                echo "**Generated test files are ready for review**" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "### 📥 Next Steps:" >> $GITHUB_STEP_SUMMARY
+                echo "1. **Download** the \`llm-generated-tests\` artifact below" >> $GITHUB_STEP_SUMMARY
+                echo "2. **Review** the generated test cases for accuracy" >> $GITHUB_STEP_SUMMARY
+                echo "3. **Adjust imports** and logic as needed for your project" >> $GITHUB_STEP_SUMMARY
+                echo "4. **Copy approved tests** to your repository's test directory" >> $GITHUB_STEP_SUMMARY
+                echo "5. **Use the Test Runner workflow** to execute and get coverage" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "### ⚠️ No Tests Generated" >> $GITHUB_STEP_SUMMARY
+                echo "Check the logs above for potential issues" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+          else
+            echo "### ℹ️ No Python Changes Detected" >> $GITHUB_STEP_SUMMARY
+            echo "No Python files were modified, skipping test generation." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Tip:** Use 'Run workflow' button to manually trigger generation" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- \`llm-generated-tests\` - Complete test generation package with instructions" >> $GITHUB_STEP_SUMMARY

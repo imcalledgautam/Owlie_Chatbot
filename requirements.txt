@@ -3,5 +3,7 @@ sentence-transformers
 faiss-cpu
 pandas
 numpy
-gradio
 requests
+pytest
+coverage
+pytest-cov
