@@ -1,0 +1,344 @@
+name: Enhanced LLM Test Generator V2 - Import Validation Fix
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_files:
+        description: 'Specific files to test (comma-separated)'
+        required: false
+        type: string
+  push:
+    branches: [ main, master ]
+    paths: ['**.py']
+
+jobs:
+  enhanced-test-generation-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest pytest-cov coverage
+          
+          # Install repo-specific dependencies
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Enhanced Context Analysis with Module Discovery
+        run: |
+          mkdir -p ci_artifacts
+          
+          cat > module_discovery.py << 'EOF'
+          import os, json, ast, sys
+          from pathlib import Path
+          
+          def discover_actual_modules():
+              """Discover actual importable modules in the repository"""
+              root = Path.cwd()
+              modules = {}
+              
+              print("🔍 Scanning repository for actual modules...")
+              
+              # Find all Python files
+              py_files = []
+              for py_file in root.rglob("*.py"):
+                  if not any(part.startswith('.') or part in ['__pycache__', 'node_modules'] for part in py_file.parts):
+                      py_files.append(py_file)
+              
+              print(f"📁 Found {len(py_files)} Python files")
+              
+              # Map importable modules
+              for py_file in py_files:
+                  try:
+                      rel_path = py_file.relative_to(root)
+                      
+                      # Add the module without extension
+                      if rel_path.name != "__init__.py":
+                          module_name = rel_path.stem
+                          path_parts = list(rel_path.parts[:-1])  # Remove filename
+                          
+                          if path_parts:
+                              full_module = ".".join(path_parts + [module_name])
+                              modules[full_module] = str(rel_path)
+                          
+                          modules[module_name] = str(rel_path)
+                      
+                      # Add directory modules if __init__.py exists
+                      if rel_path.name == "__init__.py" and rel_path.parts:
+                          dir_module = ".".join(rel_path.parts[:-1])
+                          if dir_module:
+                              modules[dir_module] = str(rel_path.parent)
+                  
+                  except Exception as e:
+                      print(f"Error processing {py_file}: {e}")
+              
+              print(f"📋 Discovered modules: {list(modules.keys())}")
+              return modules
+          
+          def analyze_files():
+              """Analyze changed files"""
+              changed_files = []
+              
+              # Get files to analyze
+              try:
+                  import subprocess
+                  result = subprocess.run(['git', 'diff', '--name-only', 'HEAD~1', 'HEAD'], 
+                                        capture_output=True, text=True)
+                  if result.returncode == 0:
+                      changed_files = [f.strip() for f in result.stdout.split('\n') 
+                                     if f.strip().endswith('.py')]
+              except:
+                  pass
+              
+              if not changed_files:
+                  # Default to key files for testing
+                  potential_files = ['src/app.py', 'src/config.py', 'app.py', 'main.py', 'config.py']
+                  for f in potential_files:
+                      if Path(f).exists():
+                          changed_files.append(f)
+              
+              print(f"📂 Files to analyze: {changed_files}")
+              return changed_files[:3]  # Limit for performance
+          
+          def main():
+              print("🚀 Starting enhanced module discovery...")
+              
+              modules = discover_actual_modules()
+              files = analyze_files()
+              
+              # Create context with actual modules
+              context = {
+                  'actual_modules': modules,
+                  'target_files': files,
+                  'validation_rules': {
+                      'allowed_local_modules': list(modules.keys()),
+                      'blocked_patterns': ['src.ui', 'nonexistent'],
+                      'required_imports': ['pytest', 'unittest.mock']
+                  }
+              }
+              
+              with open('ci_artifacts/module_context.json', 'w') as f:
+                  json.dump(context, f, indent=2)
+              
+              print("✅ Module discovery complete")
+              print(f"🔧 Found {len(modules)} importable modules")
+          
+          if __name__ == "__main__":
+              main()
+          EOF
+          
+          python module_discovery.py
+
+      - name: Install Ollama
+        run: |
+          echo "🤖 Installing Ollama..."
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 10
+          echo "📦 Pulling Qwen2.5-Coder model..."
+          ollama pull qwen2.5-coder:1.5b
+
+      - name: Generate Tests with Import Validation
+        run: |
+          cat > smart_test_generator.py << 'EOF'
+          import json, requests, os, re, ast
+          from pathlib import Path
+          
+          def generate_smart_prompt(context):
+              actual_modules = context.get('actual_modules', {})
+              blocked_patterns = context.get('validation_rules', {}).get('blocked_patterns', [])
+              
+              return f"""You are a Python test engineer. Generate pytest tests with STRICT import rules.
+          
+          CRITICAL: Only use these REAL modules that exist: {list(actual_modules.keys())[:15]}
+          
+          FORBIDDEN imports (will cause errors): {blocked_patterns}
+          
+          RULES:
+          1. Only import modules from the allowed list above
+          2. Use 'from unittest.mock import patch, Mock' for mocking
+          3. Import pytest for test functions
+          4. Do NOT invent module names
+          5. If you need something not in the list, use mocks
+          
+          Generate working pytest tests with valid imports only."""
+          
+          def call_ollama(prompt):
+              try:
+                  response = requests.post("http://localhost:11434/api/generate", 
+                                         json={
+                                             "model": "qwen2.5-coder:1.5b",
+                                             "prompt": prompt,
+                                             "stream": False,
+                                             "options": {"temperature": 0.1}
+                                         }, timeout=120)
+                  return response.json().get('response', '')
+              except Exception as e:
+                  print(f"LLM error: {e}")
+                  return None
+          
+          def extract_code(response):
+              if not response:
+                  return None
+              
+              patterns = [r'```python\s*\n(.*?)\n```', r'```\s*\n(.*?)\n```']
+              for pattern in patterns:
+                  matches = re.findall(pattern, response, re.DOTALL)
+                  if matches:
+                      code = matches[0].strip()
+                      try:
+                          ast.parse(code)
+                          return code
+                      except SyntaxError:
+                          continue
+              return None
+          
+          def validate_imports(code, context):
+              """Validate and fix imports"""
+              allowed_modules = set(context.get('actual_modules', {}).keys())
+              blocked_patterns = context.get('validation_rules', {}).get('blocked_patterns', [])
+              
+              lines = code.split('\n')
+              fixed_lines = []
+              
+              for line in lines:
+                  original = line.strip()
+                  
+                  # Check import statements
+                  if original.startswith(('from ', 'import ')):
+                      # Extract module name
+                      if 'from ' in original and ' import ' in original:
+                          match = re.search(r'from\s+([\w\.]+)', original)
+                          if match:
+                              module = match.group(1)
+                              
+                              # Check if blocked
+                              if any(pattern in module for pattern in blocked_patterns):
+                                  fixed_lines.append(f"# {line}  # BLOCKED: {module} doesn't exist")
+                                  print(f"🚫 Blocked invalid import: {module}")
+                                  continue
+                              
+                              # Check if allowed
+                              if module not in allowed_modules and module.split('.')[0] not in allowed_modules:
+                                  # Allow standard library imports
+                                  stdlib_modules = {'os', 'sys', 'json', 'pytest', 'unittest', 'mock', 'datetime'}
+                                  if module.split('.')[0] not in stdlib_modules:
+                                      fixed_lines.append(f"# {line}  # Module not found: {module}")
+                                      print(f"⚠️ Commented out unknown module: {module}")
+                                      continue
+                  
+                  fixed_lines.append(line)
+              
+              # Ensure essential imports
+              code_text = '\n'.join(fixed_lines)
+              if 'pytest' in code_text and 'import pytest' not in code_text:
+                  fixed_lines.insert(0, 'import pytest')
+              if '@patch' in code_text and 'from unittest.mock import' not in code_text:
+                  fixed_lines.insert(0, 'from unittest.mock import patch, Mock')
+              
+              return '\n'.join(fixed_lines)
+          
+          # Load context
+          with open('ci_artifacts/module_context.json', 'r') as f:
+              context = json.load(f)
+          
+          print(f"🧠 Loaded context with {len(context['actual_modules'])} modules")
+          
+          # Create output directory
+          os.makedirs('tests/generated_v2_fixed', exist_ok=True)
+          
+          # Generate tests for target files
+          for file_path in context['target_files']:
+              if not Path(file_path).exists():
+                  continue
+              
+              print(f"🧪 Generating validated tests for {file_path}")
+              
+              # Read file content
+              try:
+                  with open(file_path, 'r') as f:
+                      content = f.read()[:8000]
+              except:
+                  continue
+              
+              # Create prompt
+              prompt = f"""{generate_smart_prompt(context)}
+          
+          Target file: {file_path}
+          Code:
+          ```python
+          {content}
+          ```
+          
+          Generate pytest tests:"""
+              
+              # Generate with LLM
+              response = call_ollama(prompt)
+              code = extract_code(response)
+              
+              if code:
+                  # Validate imports
+                  validated_code = validate_imports(code, context)
+                  
+                  # Save test file
+                  test_file = f"tests/generated_v2_fixed/test_{Path(file_path).stem}_fixed.py"
+                  
+                  header = '''"""
+          Generated test with import validation
+          """
+          import pytest
+          from unittest.mock import patch, Mock
+          import sys
+          import os
+          sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+          
+          '''
+                  
+                  with open(test_file, 'w') as f:
+                      f.write(header + validated_code)
+                  
+                  print(f"✅ Created {test_file}")
+              else:
+                  print(f"❌ Failed to generate tests for {file_path}")
+          
+          print("🎉 Test generation complete")
+          EOF
+          
+          python smart_test_generator.py
+
+      - name: Run Import-Validated Tests
+        run: |
+          echo "🧪 Running import-validated tests..."
+          
+          if [ -d "tests/generated_v2_fixed" ] && [ "$(ls -A tests/generated_v2_fixed)" ]; then
+            echo "📁 Generated test files:"
+            ls -la tests/generated_v2_fixed/
+            
+            echo "🔍 Running validated tests:"
+            python -m pytest tests/generated_v2_fixed/ -v --tb=short || true
+          else
+            echo "⚠️ No validated tests found"
+          fi
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: import-validated-tests
+          path: |
+            tests/generated_v2_fixed/
+            ci_artifacts/
+          retention-days: 5
