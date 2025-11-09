@@ -1,0 +1,565 @@
+name: Enhanced LLM Test Generator - Universal
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_files:
+        description: 'Specific files to test (comma-separated)'
+        required: false
+        type: string
+  push:
+    branches: [ main, master ]
+    paths: ['**.py']
+
+jobs:
+  enhanced-test-generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest pytest-cov coverage
+          
+          # Install repo-specific dependencies
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Create Enhanced Context Builder
+        run: |
+          mkdir -p ci_artifacts
+          
+          cat > enhanced_context_builder.py << 'EOF'
+          import os, re, json, subprocess, ast, sys
+          from pathlib import Path
+          from typing import Dict, List, Set, Any, Optional
+          
+          class UniversalContextAnalyzer:
+              """Universal context analyzer that works across any Python repository"""
+              
+              def __init__(self, root_path: Path):
+                  self.root = Path(root_path).resolve()
+                  try:
+                      self.python_files = list(self.root.rglob("*.py"))
+                      # Filter out common non-app directories
+                      self.python_files = [f for f in self.python_files 
+                                         if not any(part.startswith('.') or part in ['__pycache__', 'node_modules', 'venv', 'env'] 
+                                                  for part in f.parts)]
+                  except (PermissionError, OSError):
+                      self.python_files = []
+                      for py_file in Path(root_path).glob("**/*.py"):
+                          try:
+                              if py_file.is_file():
+                                  self.python_files.append(py_file)
+                          except (PermissionError, OSError):
+                              continue
+              
+              def scan_all_imports(self) -> Dict[str, Set[str]]:
+                  """Scan all Python files and extract available imports"""
+                  all_imports = {
+                      'stdlib': set(),
+                      'local': set(), 
+                      'external': set()
+                  }
+                  
+                  # Standard library modules
+                  stdlib_modules = {
+                      'os', 'sys', 'json', 'ast', 'inspect', 're', 'pathlib', 'typing',
+                      'unittest', 'pytest', 'mock', 'datetime', 'collections', 'itertools',
+                      'functools', 'math', 'random', 'string', 'io', 'csv', 'sqlite3'
+                  }
+                  all_imports['stdlib'] = stdlib_modules
+                  
+                  # Scan for local and external imports
+                  for py_file in self.python_files:
+                      try:
+                          content = py_file.read_text(encoding='utf-8')
+                          imports = self.extract_imports_from_code(content)
+                          
+                          for imp in imports:
+                              if imp in stdlib_modules:
+                                  all_imports['stdlib'].add(imp)
+                              elif self.is_local_module(imp):
+                                  all_imports['local'].add(imp)
+                              else:
+                                  all_imports['external'].add(imp)
+                                  
+                      except Exception:
+                          continue
+                          
+                  return all_imports
+              
+              def extract_imports_from_code(self, code: str) -> Set[str]:
+                  """Extract all imports from Python code using AST"""
+                  imports = set()
+                  try:
+                      tree = ast.parse(code)
+                      for node in ast.walk(tree):
+                          if isinstance(node, ast.Import):
+                              for alias in node.names:
+                                  imports.add(alias.name.split('.')[0])
+                          elif isinstance(node, ast.ImportFrom):
+                              if node.module:
+                                  imports.add(node.module.split('.')[0])
+                  except Exception:
+                      pass
+                  return imports
+              
+              def is_local_module(self, module_name: str) -> bool:
+                  """Check if a module is local to the repository"""
+                  candidates = [
+                      self.root / f"{module_name}.py",
+                      self.root / module_name / "__init__.py",
+                      self.root / "src" / f"{module_name}.py", 
+                      self.root / "src" / module_name / "__init__.py",
+                      self.root / "app" / f"{module_name}.py",
+                      self.root / "code" / f"{module_name}.py"
+                  ]
+                  return any(c.exists() for c in candidates)
+              
+              def extract_function_signatures(self) -> Dict[str, List[Dict]]:
+                  """Extract function signatures from all Python files"""
+                  signatures = {}
+                  
+                  for py_file in self.python_files:
+                      try:
+                          content = py_file.read_text(encoding='utf-8')
+                          rel_path = str(py_file.relative_to(self.root))
+                          signatures[rel_path] = self.parse_functions_from_code(content)
+                      except Exception:
+                          continue
+                          
+                  return signatures
+              
+              def parse_functions_from_code(self, code: str) -> List[Dict]:
+                  """Parse function signatures from code using AST"""
+                  functions = []
+                  try:
+                      tree = ast.parse(code)
+                      for node in ast.walk(tree):
+                          if isinstance(node, ast.FunctionDef):
+                              if not node.name.startswith('_'):
+                                  func_info = {
+                                      'name': node.name,
+                                      'args': [arg.arg for arg in node.args.args],
+                                      'docstring': ast.get_docstring(node),
+                                      'lineno': node.lineno
+                                  }
+                                  functions.append(func_info)
+                  except Exception:
+                      pass
+                  return functions
+              
+              def analyze_project_structure(self) -> Dict[str, Any]:
+                  """Analyze the project structure and identify patterns"""
+                  structure = {
+                      'has_src_dir': (self.root / 'src').exists(),
+                      'has_app_dir': (self.root / 'app').exists(), 
+                      'has_code_dir': (self.root / 'code').exists(),
+                      'has_tests_dir': (self.root / 'tests').exists(),
+                      'framework': self.detect_framework(),
+                      'package_files': self.find_package_files()
+                  }
+                  return structure
+              
+              def detect_framework(self) -> List[str]:
+                  """Detect which frameworks/libraries are being used"""
+                  frameworks = []
+                  
+                  framework_indicators = {
+                      'flask': ['from flask import', 'import flask'],
+                      'django': ['from django', 'import django'],
+                      'fastapi': ['from fastapi import', 'import fastapi'],
+                      'pytest': ['import pytest', 'from pytest'],
+                      'pandas': ['import pandas', 'from pandas'], 
+                      'numpy': ['import numpy', 'from numpy'],
+                      'sklearn': ['from sklearn', 'import sklearn'],
+                      'gradio': ['import gradio', 'from gradio'],
+                      'streamlit': ['import streamlit', 'from streamlit'],
+                      'sentence_transformers': ['from sentence_transformers', 'import sentence_transformers'],
+                      'faiss': ['import faiss', 'from faiss']
+                  }
+                  
+                  all_content = ""
+                  for py_file in self.python_files:
+                      try:
+                          all_content += py_file.read_text(encoding='utf-8') + "\n"
+                      except:
+                          continue
+                  
+                  for framework, indicators in framework_indicators.items():
+                      if any(indicator in all_content for indicator in indicators):
+                          frameworks.append(framework)
+                          
+                  return frameworks
+              
+              def find_package_files(self) -> List[str]:
+                  """Find package/dependency files"""
+                  package_files = []
+                  candidates = ['requirements.txt', 'pyproject.toml', 'setup.py', 'Pipfile']
+                  
+                  for candidate in candidates:
+                      if (self.root / candidate).exists():
+                          package_files.append(candidate)
+                          
+                  return package_files
+          
+          def gather_enhanced_context():
+              """Enhanced universal context gathering"""
+              print("🔍 Starting enhanced universal context analysis...")
+              
+              root = Path.cwd()
+              analyzer = UniversalContextAnalyzer(root)
+              
+              # Get changed files or all Python files
+              changed_files = []
+              try:
+                  if os.getenv('GITHUB_EVENT_NAME') == 'workflow_dispatch':
+                      target_files = os.getenv('INPUT_TARGET_FILES', '')
+                      if target_files:
+                          changed_files = [f.strip() for f in target_files.split(',')]
+                      else:
+                          changed_files = [str(f.relative_to(root)) for f in analyzer.python_files[:5]]  # Limit for testing
+                  else:
+                      # Get changed files from git
+                      result = subprocess.run(['git', 'diff', '--name-only', 'HEAD~1', 'HEAD'], 
+                                            capture_output=True, text=True)
+                      if result.returncode == 0:
+                          changed_files = [f.strip() for f in result.stdout.split('\n') 
+                                         if f.strip().endswith('.py')]
+                      if not changed_files:
+                          changed_files = [str(f.relative_to(root)) for f in analyzer.python_files[:3]]
+              except:
+                  changed_files = [str(f.relative_to(root)) for f in analyzer.python_files[:3]]
+              
+              print(f"📁 Files to analyze: {changed_files}")
+              
+              # Analyze project
+              project_structure = analyzer.analyze_project_structure()
+              all_imports = analyzer.scan_all_imports()
+              function_signatures = analyzer.extract_function_signatures()
+              
+              # Build file payload
+              files_payload = []
+              for file_path in changed_files:
+                  full_path = root / file_path
+                  if full_path.exists() and file_path.endswith('.py'):
+                      try:
+                          content = full_path.read_text(encoding='utf-8')[:50000]  # Truncate large files
+                          files_payload.append({
+                              'path': file_path,
+                              'full_text': content,
+                              'functions': function_signatures.get(file_path, [])
+                          })
+                      except Exception as e:
+                          print(f"Error reading {file_path}: {e}")
+              
+              # Create enhanced context
+              context = {
+                  'files': files_payload,
+                  'project_structure': project_structure,
+                  'available_imports': {
+                      'stdlib': sorted(list(all_imports['stdlib'])),
+                      'local': sorted(list(all_imports['local'])), 
+                      'external': sorted(list(all_imports['external']))
+                  },
+                  'testing_guidelines': {
+                      'import_rules': [
+                          "Only import modules that exist in available_imports",
+                          "Use 'from unittest.mock import patch, Mock' for mocking",
+                          "Import local modules using correct paths based on project_structure",
+                          "Always define test data before using it"
+                      ],
+                      'test_patterns': [
+                          "Test basic functionality with valid inputs",
+                          "Test edge cases (empty, None, invalid inputs)", 
+                          "Test exception handling with pytest.raises",
+                          "Use mocks for external dependencies",
+                          "Assert both return values and types"
+                      ]
+                  },
+                  'universal_test_examples': [
+                      '''
+          # Example 1: Basic function test
+          def test_function_basic():
+              result = my_function("input")
+              assert result is not None
+              assert isinstance(result, expected_type)
+          ''',
+                      '''
+          # Example 2: Exception handling test  
+          def test_function_handles_invalid_input():
+              with pytest.raises(ValueError):
+                  my_function(None)
+          ''',
+                      '''
+          # Example 3: Mock external dependencies
+          @patch('module.external_function')
+          def test_function_with_mock(mock_func):
+              mock_func.return_value = "mocked_result"
+              result = my_function()
+              assert result == "mocked_result"
+              mock_func.assert_called_once()
+          '''
+                  ]
+              }
+              
+              # Save context
+              with open('ci_artifacts/enhanced_context.json', 'w') as f:
+                  json.dump(context, f, indent=2)
+              
+              print(f"✅ Enhanced context created with {len(files_payload)} files")
+              print(f"🔧 Detected frameworks: {', '.join(project_structure.get('framework', ['None']))}")
+              print(f"📦 Available imports: {len(all_imports['local'])} local, {len(all_imports['external'])} external")
+              
+              return context
+          
+          if __name__ == "__main__":
+              gather_enhanced_context()
+          EOF
+          
+          python enhanced_context_builder.py
+
+      - name: Install Ollama
+        run: |
+          echo "🤖 Installing Ollama..."
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 10
+          echo "📦 Pulling Qwen2.5-Coder model..."
+          ollama pull qwen2.5-coder:1.5b
+          ollama list
+
+      - name: Generate Enhanced Tests with Validation
+        run: |
+          cat > enhanced_test_generator.py << 'EOF'
+          import json, requests, os, re, ast
+          from pathlib import Path
+          
+          def create_enhanced_prompt():
+              return """You are a senior Python test engineer. Create comprehensive pytest tests.
+          
+          CRITICAL REQUIREMENTS:
+          1. ONLY use imports from the available_imports list provided
+          2. Follow the project_structure for correct import paths
+          3. Use the testing_guidelines and examples provided
+          4. Generate syntactically correct Python code only
+          5. Test real functionality, not placeholder code
+          
+          IMPORT STRATEGY:
+          - For local modules: Check project_structure and use correct paths
+          - For external modules: Only use what's in available_imports['external']
+          - Always include: import pytest, from unittest.mock import patch, Mock
+          
+          OUTPUT: Only Python code in ```python ``` blocks."""
+          
+          def call_ollama_api(prompt, model="qwen2.5-coder:1.5b"):
+              url = "http://localhost:11434/api/generate"
+              payload = {
+                  "model": model,
+                  "prompt": prompt,
+                  "stream": False,
+                  "options": {
+                      "temperature": 0.1,
+                      "top_p": 0.9,
+                      "num_predict": 2000
+                  }
+              }
+              
+              try:
+                  response = requests.post(url, json=payload, timeout=180)
+                  response.raise_for_status()
+                  return response.json().get('response', '')
+              except Exception as e:
+                  print(f"❌ Ollama API error: {e}")
+                  return None
+          
+          def extract_and_validate_code(llm_response):
+              """Extract code and perform basic validation"""
+              if not llm_response:
+                  return None
+              
+              # Extract Python code blocks
+              code_patterns = [
+                  r'```python\s*\n(.*?)\n```',
+                  r'```\s*\n(.*?)\n```'
+              ]
+              
+              for pattern in code_patterns:
+                  matches = re.findall(pattern, llm_response, re.DOTALL)
+                  if matches:
+                      code = matches[0].strip()
+                      
+                      # Basic validation
+                      try:
+                          ast.parse(code)  # Check syntax
+                          if 'def test_' in code:  # Has test functions
+                              return code
+                      except SyntaxError as e:
+                          print(f"⚠️ Syntax error in generated code: {e}")
+                          continue
+              
+              return None
+          
+          def validate_and_fix_imports(code, context):
+              """Validate and fix import issues"""
+              lines = code.split('\n')
+              fixed_lines = []
+              available_locals = context.get('available_imports', {}).get('local', [])
+              available_externals = context.get('available_imports', {}).get('external', [])
+              
+              imports_added = set()
+              
+              for line in lines:
+                  original_line = line
+                  
+                  # Fix common import issues
+                  if line.strip().startswith('from ') and ' import ' in line:
+                      # Extract module name
+                      match = re.match(r'from\s+(\w+)\s+import', line.strip())
+                      if match:
+                          module = match.group(1)
+                          
+                          # Fix local module paths
+                          if module in available_locals:
+                              pass  # Keep as is
+                          elif f'src.{module}' in available_locals:
+                              line = line.replace(f'from {module}', f'from src.{module}')
+                          elif module not in available_externals:
+                              # Comment out unavailable imports
+                              line = f"# {line}  # Module not available"
+                  
+                  # Add essential imports if missing
+                  if line.strip().startswith('def test_') and 'pytest' not in '\n'.join(fixed_lines):
+                      if 'import pytest' not in imports_added:
+                          fixed_lines.insert(0, 'import pytest')
+                          imports_added.add('import pytest')
+                  
+                  fixed_lines.append(line)
+              
+              return '\n'.join(fixed_lines)
+          
+          # Load enhanced context
+          with open('ci_artifacts/enhanced_context.json', 'r') as f:
+              context = json.load(f)
+          
+          print(f"🧠 Loaded context for {len(context['files'])} files")
+          print(f"🔧 Project uses: {', '.join(context['project_structure']['framework'])}")
+          
+          # Create tests directory
+          os.makedirs('tests/generated_by_llm', exist_ok=True)
+          
+          # Generate tests for each file
+          prompt_template = create_enhanced_prompt()
+          generated_count = 0
+          
+          for file_data in context['files']:
+              file_path = file_data['path']
+              file_content = file_data.get('full_text', '')
+              
+              if not file_content or len(file_content) < 50:
+                  continue
+              
+              print(f"🧪 Generating tests for {file_path}...")
+              
+              # Create comprehensive prompt with context
+              full_prompt = f"""{prompt_template}
+          
+          PROJECT CONTEXT:
+          - Framework: {', '.join(context['project_structure']['framework'])}
+          - Has src/ dir: {context['project_structure']['has_src_dir']}
+          - Available local imports: {', '.join(context['available_imports']['local'][:10])}
+          - Available external imports: {', '.join(context['available_imports']['external'][:10])}
+          
+          TESTING GUIDELINES:
+          {chr(10).join(f"- {rule}" for rule in context['testing_guidelines']['import_rules'])}
+          
+          EXAMPLE PATTERNS:
+          {chr(10).join(context['universal_test_examples'])}
+          
+          TARGET FILE: {file_path}
+          CODE TO TEST:
+          ```python
+          {file_content[:8000]}
+          ```
+          
+          Generate comprehensive pytest tests:"""
+              
+              # Call LLM
+              llm_response = call_ollama_api(full_prompt)
+              test_code = extract_and_validate_code(llm_response)
+              
+              if test_code:
+                  # Validate and fix imports
+                  fixed_code = validate_and_fix_imports(test_code, context)
+                  
+                  # Create test file
+                  module_name = Path(file_path).stem
+                  test_file = f"tests/generated_by_llm/test_{module_name}.py"
+                  
+                  header = f'''"""
+          Enhanced test file for {file_path}
+          Generated by: Enhanced Universal LLM Test Generator
+          Framework detected: {', '.join(context['project_structure']['framework'])}
+          """
+          
+          import pytest
+          from unittest.mock import patch, Mock, MagicMock
+          import sys
+          import os
+          
+          # Add project root to path for imports
+          sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+          
+          '''
+                  
+                  with open(test_file, 'w') as f:
+                      f.write(header + fixed_code)
+                  
+                  print(f"✅ Generated {test_file}")
+                  generated_count += 1
+              else:
+                  print(f"❌ Failed to generate valid tests for {file_path}")
+          
+          print(f"🎉 Generated {generated_count} test files")
+          EOF
+          
+          python enhanced_test_generator.py
+
+      - name: Run Generated Tests
+        run: |
+          echo "🧪 Running enhanced generated tests..."
+          
+          if [ -d "tests/generated_by_llm" ] && [ "$(ls -A tests/generated_by_llm)" ]; then
+            echo "📁 Found generated tests:"
+            ls -la tests/generated_by_llm/
+            
+            echo "🔍 Running tests with verbose output..."
+            python -m pytest tests/generated_by_llm/ -v --tb=short --no-header || true
+            
+            echo "📊 Test results summary completed"
+          else
+            echo "⚠️ No generated tests found"
+          fi
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: enhanced-test-results
+          path: |
+            tests/generated_by_llm/
+            ci_artifacts/
+          retention-days: 7
