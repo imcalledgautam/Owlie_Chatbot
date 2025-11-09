@@ -1,0 +1,16 @@
+{
+  "approved": false,
+  "reviewer": "Security Reviewer",
+  "timestamp": "2025-11-05T19:55:11.481099Z",
+  "reason": "The test files contain external network calls and non-deterministic behavior that violate our security and reliability policies. Please regenerate without these issues.",
+  "files": [
+    "full-demo-project/test_business_logic_qwen_simulated.py",
+    "test_sample_module_generated.py",
+    "tests/unit/test_basic.py",
+    "tests/unit/test_genai_test_runner.py",
+    "tools/test_business_logic_hitl_demo.py",
+    "tools/test_hitl_integration.py",
+    "tools/test_payment_processor_bad.py",
+    "tools/test_user_validator_good.py"
+  ]
+}

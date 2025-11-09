@@ -1,0 +1,82 @@
+{
+  "started_at": "2025-11-06T21:23:45.199532Z",
+  "runner_version": "1.0.0",
+  "repository_root": "/workspaces/genai-test-platform",
+  "stack": "python",
+  "steps": [
+    {
+      "phase": "dependencies",
+      "results": [
+        {
+          "cmd": "python -m pip install -U pip",
+          "rc": 0,
+          "duration_sec": 0.719,
+          "stdout": "Defaulting to user installation because normal site-packages is not writeable\nRequirement already satisfied: pip in /home/vscode/.local/lib/python3.11/site-packages (25.3)\n",
+          "stderr": "",
+          "success": true
+        },
+        {
+          "cmd": "if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi",
+          "rc": 0,
+          "duration_sec": 0.341,
+          "stdout": "Defaulting to user installation because normal site-packages is not writeable\nRequirement already satisfied: pytest>=8.0.0 in /home/vscode/.local/lib/python3.11/site-packages (from -r requirements.txt (line 5)) (8.4.2)\nRequirement already satisfied: pytest-cov>=4.0.0 in /home/vscode/.local/lib/python3.11/site-packages (from -r requirements.txt (line 6)) (7.0.0)\nRequirement already satisfied: coverage>=7.0.0 in /home/vscode/.local/lib/python3.11/site-packages (from -r requirements.txt (line 7)) (7.11.0)\nRequirement already satisfied: requests>=2.31.0 in /home/vscode/.local/lib/python3.11/site-packages (from -r requirements.txt (line 10)) (2.32.5)\nRequirement already satisfied: pathlib2>=2.3.7 in /home/vscode/.local/lib/python3.11/site-packages (from -r requirements.txt (line 13)) (2.3.7.post1)\nRequirement already satisfied: typing-extensions>=4.0.0 in /home/vscode/.local/lib/python3.11/site-packages (from -r requirements.txt (line 14)) (4.15.0)\nRequirement already satisfied: iniconfig>=1 in /home/vscode/.local/lib/python3.11/site-packages (from pytest>=8.0.0->-r requirements.txt (line 5)) (2.3.0)\nRequirement already satisfied: packaging>=20 in /home/vscode/.local/lib/python3.11/site-packages (from pytest>=8.0.0->-r requirements.txt (line 5)) (25.0)\nRequirement already satisfied: pluggy<2,>=1.5 in /home/vscode/.local/lib/python3.11/site-packages (from pytest>=8.0.0->-r requirements.txt (line 5)) (1.6.0)\nRequirement already satisfied: pygments>=2.7.2 in /home/vscode/.local/lib/python3.11/site-packages (from pytest>=8.0.0->-r requirements.txt (line 5)) (2.19.2)\nRequirement already satisfied: charset_normalizer<4,>=2 in /home/vscode/.local/lib/python3.11/site-packages (from requests>=2.31.0->-r requirements.txt (line 10)) (3.4.4)\nRequirement already satisfied: idna<4,>=2.5 in /home/vscode/.local/lib/python3.11/site-packages (from requests>=2.31.0->-r requirements.txt (line 10)) (3.11)\nRequirement already satisfied: urllib3<3,>=1.21.1 in /home/vscode/.local/lib/python3.11/site-packages (from requests>=2.31.0->-r requirements.txt (line 10)) (2.5.0)\nRequirement already satisfied: certifi>=2017.4.17 in /home/vscode/.local/lib/python3.11/site-packages (from requests>=2.31.0->-r requirements.txt (line 10)) (2025.10.5)\nRequirement already satisfied: six in /home/vscode/.local/lib/python3.11/site-packages (from pathlib2>=2.3.7->-r requirements.txt (line 13)) (1.17.0)\n",
+          "stderr": "",
+          "success": true
+        },
+        {
+          "cmd": "if [ -f pyproject.toml ]; then python -m pip install .; fi",
+          "rc": 1,
+          "duration_sec": 1.331,
+          "stdout": "Defaulting to user installation because normal site-packages is not writeable\nProcessing /workspaces/genai-test-platform\n  Installing build dependencies: started\n  Installing build dependencies: finished with status 'done'\n  Getting requirements to build wheel: started\n  Getting requirements to build wheel: finished with status 'error'\n",
+          "stderr": "  error: subprocess-exited-with-error\n  \n  \u00d7 Getting requirements to build wheel did not run successfully.\n  \u2502 exit code: 1\n  \u2570\u2500> [14 lines of output]\n      error: Multiple top-level packages discovered in a flat-layout: ['schemas', 'llm_agent', 'genai_artifacts', 'training_examples'].\n      \n      To avoid accidental inclusion of unwanted files or directories,\n      setuptools will not proceed with this build.\n      \n      If you are trying to create a single distribution with multiple packages\n      on purpose, you should not rely on automatic discovery.\n      Instead, consider the following options:\n      \n      1. set up custom discovery (`find` directive with `include` or `exclude`)\n      2. use a `src-layout`\n      3. explicitly set `py_modules` or `packages` with a list of names\n      \n      To find more information, look for \"package discovery\" on setuptools docs.\n      [end of output]\n  \n  note: This error originates from a subprocess, and is likely not a problem with pip.\nERROR: Failed to build 'file:///workspaces/genai-test-platform' when getting requirements to build wheel\n",
+          "success": false
+        }
+      ],
+      "success": false
+    },
+    {
+      "phase": "genai_generation",
+      "results": {
+        "generated": true,
+        "plan_file": "/workspaces/genai-test-platform/genai_artifacts/genai_test_plan.json",
+        "result": {
+          "enabled": true,
+          "stack": "python",
+          "strategy": "augment_if_missing",
+          "timestamp": "2025-11-06T21:23:47.644485Z",
+          "notes": "LLM generates tests for public functions/classes discovered by context_builder.",
+          "context_ready": true,
+          "context_file": "/workspaces/genai-test-platform/genai_artifacts/context.json",
+          "symbols_found": 113,
+          "generation_attempted": true,
+          "tests_generated": 1
+        }
+      },
+      "success": true
+    },
+    {
+      "phase": "native_tests",
+      "result": {
+        "cmd": "python -m pytest -v --tb=short --maxfail=5 --cov=. --cov-report=xml:coverage.xml --cov-report=term --junitxml=test-results.xml || python -m unittest discover -v || true",
+        "rc": 0,
+        "duration_sec": 651.164,
+        "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.13, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python\ncachedir: .pytest_cache\nrootdir: /workspaces/genai-test-platform\nconfigfile: pyproject.toml\nplugins: cov-7.0.0\ncollecting ... collected 47 items\n\ntests/generated/test_context_builder_chunked.py::test_configure_logging PASSED [  2%]\ntests/generated/test_context_builder_chunked.py::test_artifacts_directory PASSED [  4%]\ntests/generated/test_context_builder_chunked.py::test_logging_configuration PASSED [  6%]\ntests/generated/test_context_builder_chunked.py::test_logging_output PASSED [  8%]\ntests/generated/test_context_builder_chunked.py::test_root_directory PASSED [ 10%]\ntests/generated/test_context_builder_chunked.py::test_log_message PASSED [ 12%]\ntests/generated/test_context_builder_v2.py::test_build_llm_context PASSED [ 14%]\ntests/generated/test_context_builder_v2.py::test_summarize_repo PASSED   [ 17%]\ntests/generated/test_context_builder_v2.py::test_extract_python_surface PASSED [ 19%]\ntests/generated/test_context_builder_v2.py::test_context_file_creation PASSED [ 21%]\ntests/generated/test_mvp_generated.py::test_basic_functionality PASSED   [ 23%]\ntests/generated/test_mvp_generated.py::test_simple_math PASSED           [ 25%]\ntests/generated/test_mvp_generated.py::test_user_validation PASSED       [ 27%]\ntests/generated/test_mvp_generated.py::test_api_endpoints PASSED         [ 29%]\ntests/generated/test_mvp_generated.py::test_email_validation PASSED      [ 31%]\ntests/generated/test_mvp_generated.py::test_user_creation PASSED         [ 34%]\ntests/generated/test_mvp_generated.py::test_data_persistence PASSED      [ 36%]\ntests/generated/test_mvp_generated.py::test_calculate_sum PASSED         [ 38%]\ntests/generated/test_mvp_generated.py::test_validate_email_basic PASSED  [ 40%]\ntests/generated/test_mvp_generated.py::test_validate_email_edge_cases PASSED [ 42%]\ntests/generated/test_mvp_generated.py::test_calculate_sum_basic PASSED   [ 44%]\ntests/generated/test_mvp_generated.py::test_calculate_sum_edge_cases PASSED [ 46%]\ntests/generated/test_mvp_generated_fixed.py::test_basic_functionality PASSED [ 48%]\ntests/generated/test_mvp_generated_fixed.py::test_simple_math PASSED     [ 51%]\ntests/generated/test_mvp_generated_fixed.py::test_string_operations PASSED [ 53%]\ntests/generated/test_mvp_generated_fixed.py::test_list_operations PASSED [ 55%]\ntests/generated/test_platform_functionality.py::test_basic_functionality PASSED [ 57%]\ntests/generated/test_platform_functionality.py::test_simple_math PASSED  [ 59%]\ntests/generated/test_platform_functionality.py::test_string_operations PASSED [ 61%]\ntests/generated/test_platform_functionality.py::test_list_operations PASSED [ 63%]\ntests/generated/test_platform_functionality.py::test_dict_operations PASSED [ 65%]\ntests/generated/test_platform_functionality.py::test_file_path_operations PASSED [ 68%]\ntests/generated/test_platform_functionality.py::test_json_operations PASSED [ 70%]\ntests/generated/test_platform_functionality.py::test_parametrized_double[1-2] PASSED [ 72%]\ntests/generated/test_platform_functionality.py::test_parametrized_double[2-4] PASSED [ 74%]\ntests/generated/test_platform_functionality.py::test_parametrized_double[3-6] PASSED [ 76%]\ntests/generated/test_platform_functionality.py::test_parametrized_double[4-8] PASSED [ 78%]\ntests/generated/test_platform_functionality.py::test_exception_handling PASSED [ 80%]\ntests/generated/test_platform_functionality.py::test_platform_specific_functionality PASSED [ 82%]\ntests/generated/test_simple_generated.py::test_basic_functionality PASSED [ 85%]\ntests/generated/test_simple_generated.py::test_sample_math PASSED        [ 87%]\ntests/generated/test_simple_generated.py::test_string_operations PASSED  [ 89%]\ntests/generated_by_llm/test_code_analyzer_generated.py::test_analyze_function_for_testing FAILED [ 91%]\ntests/generated_by_llm/test_code_analyzer_generated.py::test_analyze_python_file PASSED [ 93%]\ntests/generated_by_llm/test_code_analyzer_generated.py::test_generate_test_guidance PASSED [ 95%]\ntests/unit/test_basic.py::test_stack_detection PASSED                    [ 97%]\ntests/unit/test_basic.py::test_imports PASSED                            [100%]\n\n=================================== FAILURES ===================================\n______________________ test_analyze_function_for_testing _______________________\ntests/generated_by_llm/test_code_analyzer_generated.py:22: in test_analyze_function_for_testing\n    assert result == expected_output\nE   AssertionError: assert {'edge_cases'...ers': [], ...} == {'edge_cases'...ons': [], ...}\nE     \nE     Omitting 3 identical items, use -vv to show\nE     Differing items:\nE     {'return_type': None} != {'return_type': 'int'}\nE     {'parameters': []} != {'parameters': ['a', 'b']}\nE     {'validation_checks': []} != {'validation_checks': ['isinstance check found']}\nE     {'test_recommendations': ['Test with typical valid inputs']} != {'test_recommendations': []}...\nE     \nE     ...Full output truncated (27 lines hidden), use '-vv' to show\n----- generated xml file: /workspaces/genai-test-platform/test-results.xml -----\n================================ tests coverage ================================\n_______________ coverage: platform linux, python 3.11.13-final-0 _______________\n\nName                                                     Stmts   Miss  Cover\n----------------------------------------------------------------------------\nllm_agent/__init__.py                                        2      0   100%\nllm_agent/code_analyzer.py                                 117     94    20%\nllm_agent/context_builder.py                               109    109     0%\nllm_agent/enhanced_context_builder.py                      125    125     0%\nllm_agent/generate_tests.py                                146    146     0%\nllm_agent/generate_tests_from_artifacts.py                 124    124     0%\nllm_agent/run_tests.py                                      20     20     0%\nsetup_local.py                                               0      0   100%\ntests/generated/test_context_builder_chunked.py             45      0   100%\ntests/generated/test_context_builder_v2.py                  61      0   100%\ntests/generated/test_mvp_generated.py                       67      0   100%\ntests/generated/test_mvp_generated_fixed.py                 17      0   100%\ntests/generated/test_platform_functionality.py              63      0   100%\ntests/generated/test_simple_generated.py                     9      0   100%\ntests/generated_by_llm/test_code_analyzer_generated.py      12      0   100%\ntests/unit/test_basic.py                                    15      3    80%\ntools/context_builder_v2.py                                 78     14    82%\ntools/unified_test_runner.py                               260    232    11%\n----------------------------------------------------------------------------\nTOTAL                                                     1270    867    32%\nCoverage XML written to file coverage.xml\n=========================== short test summary info ============================\nFAILED tests/generated_by_llm/test_code_analyzer_generated.py::test_analyze_function_for_testing\n=================== 1 failed, 46 passed in 649.62s (0:10:49) ===================\n",
+        "stderr": "\n----------------------------------------------------------------------\nRan 0 tests in 0.000s\n\nOK\n",
+        "success": true
+      },
+      "success": true
+    }
+  ],
+  "artifacts": [
+    "/workspaces/genai-test-platform/coverage.xml",
+    "/workspaces/genai-test-platform/test-results.xml",
+    "/workspaces/genai-test-platform/.coverage"
+  ],
+  "summary": {
+    "total_steps": 3,
+    "successful_steps": 2,
+    "artifacts_count": 3,
+    "overall_success": false
+  },
+  "finished_at": "2025-11-06T21:38:59.748332Z"
+}

@@ -1,0 +1,127 @@
+{
+  "timestamp": "2025-11-05T23:16:19.678168Z",
+  "repository_root": "/workspaces/genai-test-platform",
+  "stack": "python",
+  "total_checks": 7,
+  "passed_checks": 2,
+  "overall_score": 0.26190476190476186,
+  "overall_passed": false,
+  "validation_results": [
+    {
+      "check_name": "syntax_validation",
+      "passed": false,
+      "score": 0.0,
+      "message": "Syntax check failed: [Errno 2] No such file or directory: 'tests/unit/test_genai_test_runner.py'",
+      "details": null,
+      "execution_time": 0.003397
+    },
+    {
+      "check_name": "policy_compliance",
+      "passed": false,
+      "score": 0.8,
+      "message": "Policy check: 1 errors, 0 warnings (first: Failed to parse file: [Errno 2] No such file or directory: 'tests/unit/test_genai_test_runner.py')",
+      "details": {
+        "violations": 1,
+        "errors": 1,
+        "warnings": 0
+      },
+      "execution_time": 0.040824
+    },
+    {
+      "check_name": "import_validation",
+      "passed": false,
+      "score": 0.0,
+      "message": "Import check failed: [Errno 2] No such file or directory: 'tests/unit/test_genai_test_runner.py'",
+      "details": null,
+      "execution_time": 0.003115
+    },
+    {
+      "check_name": "execution_test",
+      "passed": false,
+      "score": 0.0,
+      "message": "Test execution failed",
+      "details": {
+        "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.13, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python\ncachedir: .pytest_cache\nrootdir: /workspaces/genai-test-platform\nplugins: cov-7.0.0\ncollecting ... collected 0 items\n\n============================ no tests ran in 0.05s =============================\n",
+        "stderr": "ERROR: file or directory not found: tests/unit/test_genai_test_runner.py\n\n"
+      },
+      "execution_time": 0.374646
+    },
+    {
+      "check_name": "performance_test",
+      "passed": true,
+      "score": 1.0,
+      "message": "Performance acceptable (0.41s)",
+      "details": {
+        "execution_time": 0.410786
+      },
+      "execution_time": 0.410786
+    },
+    {
+      "check_name": "coverage_analysis",
+      "passed": true,
+      "score": 0.5,
+      "message": "Coverage check failed: [Errno 2] No such file or directory: 'tests/unit/test_genai_test_runner.py'",
+      "details": null,
+      "execution_time": 0.0
+    },
+    {
+      "check_name": "hitl_approval",
+      "passed": false,
+      "score": 0.0,
+      "message": "No HITL approval found",
+      "details": null,
+      "execution_time": 0.0
+    }
+  ],
+  "summary": {
+    "by_category": {
+      "syntax_validation": {
+        "passed": 0,
+        "total": 1,
+        "avg_score": 0.0
+      },
+      "policy_compliance": {
+        "passed": 0,
+        "total": 1,
+        "avg_score": 0.8
+      },
+      "import_validation": {
+        "passed": 0,
+        "total": 1,
+        "avg_score": 0.0
+      },
+      "execution_test": {
+        "passed": 0,
+        "total": 1,
+        "avg_score": 0.0
+      },
+      "performance_test": {
+        "passed": 1,
+        "total": 1,
+        "avg_score": 1.0
+      },
+      "coverage_analysis": {
+        "passed": 1,
+        "total": 1,
+        "avg_score": 0.5
+      },
+      "hitl_approval": {
+        "passed": 0,
+        "total": 1,
+        "avg_score": 0.0
+      }
+    },
+    "total_execution_time": 0.832768,
+    "critical_failures": [
+      "syntax_validation",
+      "policy_compliance",
+      "import_validation",
+      "execution_test"
+    ]
+  },
+  "recommendations": [
+    "\u274c Fix critical validation failures before merging",
+    "\u26a0\ufe0f Address policy violations for better test quality",
+    "\ud83d\udc65 Obtain human approval before merging"
+  ]
+}

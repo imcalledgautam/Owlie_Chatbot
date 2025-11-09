@@ -1,0 +1,1813 @@
+{
+  "files": [],
+  "context": {
+    "readme": "# GenAI Test Platform v2.0 - Production Ready\n\n**One script, all stacks. AI-powered testing with human oversight.**\n\nA production-ready, stack-agnostic AI testing platform that can be deployed to any repository with minimal setup. Supports Python, Node.js, and Java projects with comprehensive safety guardrails and human-in-the-loop validation.\n\n## \ud83d\ude80 Quick Start\n\n### Option 1: Single Command Setup\nAdd this workflow to any repository:\n\n```yaml\nname: GenAI Test Platform\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: \"3.10\"\n      - name: Run GenAI Test Platform\n        run: |\n          curl -L https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/tools/genai_test_runner.py -o runner.py\n          python runner.py\n      - uses: actions/upload-artifact@v4\n        with:\n          name: test-results\n          path: genai_artifacts/\n```\n\n### Option 2: Copy Complete Workflow\nUse our pre-built workflow: [genai-unified-runner.yml](.github/workflows/genai-unified-runner.yml)\n\n## \ud83c\udfd7\ufe0f Architecture Overview\n\n### Core Components\n\n1. **`genai_test_runner.py`** - Universal test runner that detects stack, installs deps, generates tests, runs them, and aggregates results\n2. **`context_builder.py`** - Extracts repository facts to prevent AI hallucination  \n3. **`policy_checker.py`** - Validates generated tests for security and quality\n4. **`training_examples/`** - Curated good/bad test patterns for few-shot prompting\n5. **HITL workflows** - Human-in-the-loop review system with automated PR creation\n\n### Execution Flow\n\n```mermaid\ngraph TD\n    A[Repository Push] --> B[Detect Stack]\n    B --> C[Install Dependencies]\n    C --> D{AI Generation Enabled?}\n    D -->|Yes| E[Build Context]\n    E --> F[Generate Tests with LLM]\n    F --> G[Validate Generated Tests]\n    D -->|No| H[Run Native Tests]\n    G --> H\n    H --> I[Collect Reports]\n    I --> J[Upload Artifacts]\n    \n    F --> K{Human Review Required?}\n    K -->|Yes| L[Create PR Branch]\n    L --> M[Human Reviews Tests]\n    M --> N[Merge After Approval]\n    K -->|No| H\n```\n\n## \ud83c\udfaf Key Features\n\n### Universal Stack Support\n- **Python**: pytest, unittest, coverage.py\n- **Node.js**: Jest, Mocha, npm test\n- **Java**: JUnit, TestNG, Maven/Gradle\n\n### AI-Powered Test Generation\n- **LLM Integration**: Ollama + Qwen2.5-Coder for local/CI generation\n- **Context Awareness**: Analyzes existing code to generate relevant tests\n- **Few-Shot Learning**: Uses curated examples for better output quality\n\n### Safety & Security\n- **Policy Enforcement**: Blocks dangerous patterns (sleep, network calls, eval)\n- **Static Validation**: Syntax and compilation checks\n- **Sandbox Execution**: Safe test execution with resource limits\n- **Human Oversight**: Required approval for AI-generated tests\n\n### Quality Assurance  \n- **Anti-Pattern Detection**: Identifies flaky, non-deterministic tests\n- **Quality Scoring**: Automated assessment of test quality (0.0-1.0)\n- **Best Practice Enforcement**: AAA structure, clear assertions, proper naming\n\n## \ud83d\udccb What the LLM Needs (Input Specification)\n\nFor accurate test generation without hallucination, provide:\n\n### A. Code & Configuration\n```json\n{\n  \"repository_manifest\": {\n    \"total_files\": 150,\n    \"files\": [{\"path\": \"src/calc.py\", \"size\": 1024}],\n    \"config_files\": [\"requirements.txt\", \"pytest.ini\"]\n  },\n  \"public_surface\": [\n    {\"type\": \"function\", \"name\": \"add\", \"file\": \"src/calc.py\", \"args\": [\"a\", \"b\"]}\n  ],\n  \"dependencies\": [\"pytest\", \"requests\", \"numpy==1.21.0\"]\n}\n```\n\n### B. Behavioral Specs  \n- Function docstrings and type hints\n- API contracts (OpenAPI, GraphQL schemas)\n- Domain invariants (\"totals must balance\")\n- Error handling expectations\n\n### C. Execution Constraints\n- Commands: `pytest -v --cov=src/`\n- Allowed mocks: `requests`, `datetime`, `random`\n- Forbidden: `sleep()`, real network calls, file system writes\n\n### D. ",
+    "requirements": "# GenAI Test Platform - Core Dependencies\n# Essential packages for AI-powered test generation and validation\n\n# Testing Frameworks\npytest>=8.0.0\npytest-cov>=4.0.0\ncoverage>=7.0.0\n\n# HTTP and API Testing\nrequests>=2.31.0\n\n# Code Analysis and Validation\npathlib2>=2.3.7\ntyping-extensions>=4.0.0\n\n",
+    "sample_data": {},
+    "project_structure": {
+      "has_src_dir": false,
+      "has_app_dir": false,
+      "has_code_dir": false,
+      "has_tests_dir": true,
+      "framework": [
+        "flask",
+        "django",
+        "fastapi",
+        "pytest",
+        "pandas",
+        "numpy",
+        "sklearn",
+        "tensorflow",
+        "torch",
+        "gradio",
+        "streamlit"
+      ],
+      "package_files": [
+        "requirements.txt",
+        "pyproject.toml"
+      ],
+      "main_modules": []
+    },
+    "available_imports": {
+      "stdlib": [
+        "ast",
+        "collections",
+        "csv",
+        "datetime",
+        "functools",
+        "inspect",
+        "io",
+        "itertools",
+        "json",
+        "math",
+        "mock",
+        "os",
+        "pathlib",
+        "pytest",
+        "random",
+        "re",
+        "sqlite3",
+        "string",
+        "sys",
+        "typing",
+        "unittest"
+      ],
+      "local": [
+        "llm_agent"
+      ],
+      "external": [
+        "argparse",
+        "context_builder",
+        "dataclasses",
+        "importlib",
+        "lightweight_context_builder",
+        "logging",
+        "requests",
+        "shutil",
+        "subprocess",
+        "tempfile",
+        "textwrap",
+        "time",
+        "tools",
+        "zipfile"
+      ]
+    },
+    "function_signatures": {
+      "run_complete_test_solution.py": [
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "Main entry point",
+          "is_async": false
+        },
+        {
+          "name": "install_dependencies",
+          "args": [
+            "self"
+          ],
+          "returns": "bool",
+          "docstring": "Install required dependencies for testing",
+          "is_async": false
+        },
+        {
+          "name": "setup_pytest_config",
+          "args": [
+            "self"
+          ],
+          "returns": "bool",
+          "docstring": "Create or update pytest configuration",
+          "is_async": false
+        },
+        {
+          "name": "create_test_structure",
+          "args": [
+            "self"
+          ],
+          "returns": "bool",
+          "docstring": "Create proper test directory structure",
+          "is_async": false
+        },
+        {
+          "name": "fix_existing_test_imports",
+          "args": [
+            "self"
+          ],
+          "returns": "bool",
+          "docstring": "Fix import issues in existing test files",
+          "is_async": false
+        },
+        {
+          "name": "generate_sample_tests",
+          "args": [
+            "self"
+          ],
+          "returns": "bool",
+          "docstring": "Generate some sample tests to verify the setup",
+          "is_async": false
+        },
+        {
+          "name": "run_test_validation",
+          "args": [
+            "self"
+          ],
+          "returns": "bool",
+          "docstring": "Run tests to validate the setup",
+          "is_async": false
+        },
+        {
+          "name": "run_all_tests",
+          "args": [
+            "self"
+          ],
+          "returns": "bool",
+          "docstring": "Run all tests in the project",
+          "is_async": false
+        },
+        {
+          "name": "run_complete_solution",
+          "args": [
+            "self"
+          ],
+          "returns": "bool",
+          "docstring": "Run the complete test solution setup",
+          "is_async": false
+        }
+      ],
+      "setup_local.py": [],
+      "test_workflow_trigger.py": [
+        {
+          "name": "test_workflow_trigger",
+          "args": [],
+          "returns": null,
+          "docstring": "Simple function to test workflow triggering",
+          "is_async": false
+        }
+      ],
+      "llm_agent\\code_analyzer.py": [
+        {
+          "name": "analyze_function_for_testing",
+          "args": [
+            "func_source",
+            "func_name"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Analyze a function's source code to identify testable behaviors.\nReturns structured information about what should be tested.",
+          "is_async": false
+        },
+        {
+          "name": "analyze_python_file",
+          "args": [
+            "file_path"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Analyze an entire Python file and extract testable functions and classes.",
+          "is_async": false
+        },
+        {
+          "name": "generate_test_guidance",
+          "args": [
+            "file_analysis"
+          ],
+          "returns": "str",
+          "docstring": "Generate specific guidance for LLM test generation based on code analysis.",
+          "is_async": false
+        }
+      ],
+      "llm_agent\\context_builder.py": [
+        {
+          "name": "run",
+          "args": [
+            "cmd",
+            "cwd"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "list_changed_files",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "read_file",
+          "args": [
+            "path"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "direct_imports",
+          "args": [
+            "py_text"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "find_local_module_file",
+          "args": [
+            "mod_name"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "get_unified_diff",
+          "args": [
+            "path"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "small_read",
+          "args": [
+            "path_like"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "gather_context",
+          "args": [],
+          "returns": null,
+          "docstring": "Enhanced universal context gathering with deep analysis",
+          "is_async": false
+        },
+        {
+          "name": "scan_all_imports",
+          "args": [
+            "self"
+          ],
+          "returns": "Dict[str, Set[str]]",
+          "docstring": "Scan all Python files and extract available imports",
+          "is_async": false
+        },
+        {
+          "name": "extract_imports_from_code",
+          "args": [
+            "self",
+            "code"
+          ],
+          "returns": "Set[str]",
+          "docstring": "Extract all imports from Python code using AST",
+          "is_async": false
+        },
+        {
+          "name": "is_local_module",
+          "args": [
+            "self",
+            "module_name"
+          ],
+          "returns": "bool",
+          "docstring": "Check if a module is local to the repository",
+          "is_async": false
+        },
+        {
+          "name": "extract_function_signatures",
+          "args": [
+            "self"
+          ],
+          "returns": "Dict[str, List[Dict]]",
+          "docstring": "Extract function signatures from all Python files",
+          "is_async": false
+        },
+        {
+          "name": "parse_functions_from_code",
+          "args": [
+            "self",
+            "code"
+          ],
+          "returns": "List[Dict]",
+          "docstring": "Parse function signatures from code using AST",
+          "is_async": false
+        },
+        {
+          "name": "get_return_annotation",
+          "args": [
+            "self",
+            "node"
+          ],
+          "returns": "Optional[str]",
+          "docstring": "Extract return type annotation if available",
+          "is_async": false
+        },
+        {
+          "name": "analyze_project_structure",
+          "args": [
+            "self"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Analyze the project structure and identify patterns",
+          "is_async": false
+        },
+        {
+          "name": "detect_framework",
+          "args": [
+            "self"
+          ],
+          "returns": "List[str]",
+          "docstring": "Detect which frameworks/libraries are being used",
+          "is_async": false
+        },
+        {
+          "name": "find_package_files",
+          "args": [
+            "self"
+          ],
+          "returns": "List[str]",
+          "docstring": "Find package/dependency files",
+          "is_async": false
+        },
+        {
+          "name": "identify_main_modules",
+          "args": [
+            "self"
+          ],
+          "returns": "List[str]",
+          "docstring": "Identify the main application modules",
+          "is_async": false
+        },
+        {
+          "name": "generate_universal_test_examples",
+          "args": [
+            "self"
+          ],
+          "returns": "List[str]",
+          "docstring": "Generate universal test examples that work across frameworks",
+          "is_async": false
+        },
+        {
+          "name": "harvest_enhanced_targets",
+          "args": [
+            "files_payload",
+            "function_signatures"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "llm_agent\\enhanced_context_builder.py": [
+        {
+          "name": "run",
+          "args": [
+            "cmd",
+            "cwd"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "load_changed_files_from_ci",
+          "args": [],
+          "returns": null,
+          "docstring": "Load changed files from GitHub Actions artifact or local file.",
+          "is_async": false
+        },
+        {
+          "name": "list_changed_files",
+          "args": [],
+          "returns": null,
+          "docstring": "Get changed files from various sources with fallback logic.",
+          "is_async": false
+        },
+        {
+          "name": "read_file",
+          "args": [
+            "path"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "direct_imports",
+          "args": [
+            "py_text"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "find_local_module_file",
+          "args": [
+            "mod_name"
+          ],
+          "returns": null,
+          "docstring": "Find local module files with better heuristics.",
+          "is_async": false
+        },
+        {
+          "name": "get_unified_diff",
+          "args": [
+            "path"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "small_read",
+          "args": [
+            "path_like"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "gather_context",
+          "args": [],
+          "returns": null,
+          "docstring": "Enhanced context gathering with CI integration.",
+          "is_async": false
+        }
+      ],
+      "llm_agent\\generate_tests.py": [
+        {
+          "name": "load_bundle",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "build_prompt_for_module",
+          "args": [
+            "bundle",
+            "module_path"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "extract_filename_and_code",
+          "args": [
+            "block_text"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "validate_python",
+          "args": [
+            "code"
+          ],
+          "returns": "tuple[bool, str]",
+          "docstring": "Validate Python code and return (is_valid, error_message)",
+          "is_async": false
+        },
+        {
+          "name": "enforce_safe_imports",
+          "args": [
+            "code"
+          ],
+          "returns": "bool",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "call_ollama_once",
+          "args": [
+            "prompt"
+          ],
+          "returns": "str",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "generate_for_module",
+          "args": [
+            "bundle",
+            "module_path"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "llm_agent\\generate_tests_from_artifacts.py": [
+        {
+          "name": "find_context_bundle",
+          "args": [],
+          "returns": null,
+          "docstring": "Find context bundle from various possible locations.",
+          "is_async": false
+        },
+        {
+          "name": "load_bundle",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "extract_github_artifact",
+          "args": [
+            "artifact_zip_path"
+          ],
+          "returns": null,
+          "docstring": "Extract downloaded GitHub artifact zip file.",
+          "is_async": false
+        },
+        {
+          "name": "build_prompt",
+          "args": [
+            "bundle"
+          ],
+          "returns": "str",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "call_ollama",
+          "args": [
+            "prompt"
+          ],
+          "returns": "str",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "extract_code_block",
+          "args": [
+            "text"
+          ],
+          "returns": "str",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "write_test_file",
+          "args": [
+            "code"
+          ],
+          "returns": "Path",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "llm_agent\\run_tests.py": [
+        {
+          "name": "run_pytest",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "llm_agent\\universal_test_validator.py": [
+        {
+          "name": "validate_generated_test",
+          "args": [
+            "test_code",
+            "repo_root",
+            "context_bundle",
+            "target_file"
+          ],
+          "returns": "Tuple[str, List[str]]",
+          "docstring": "Main entry point for test validation",
+          "is_async": false
+        },
+        {
+          "name": "validate_and_fix_test",
+          "args": [
+            "self",
+            "test_code",
+            "target_file"
+          ],
+          "returns": "Tuple[str, List[str]]",
+          "docstring": "Main validation and fixing pipeline",
+          "is_async": false
+        }
+      ],
+      "llm_agent\\__init__.py": [],
+      "tests\\__init__.py": [],
+      "tests\\generated\\test_context_builder_chunked.py": [
+        {
+          "name": "configure_logging",
+          "args": [],
+          "returns": null,
+          "docstring": "Mock configure_logging function",
+          "is_async": false
+        },
+        {
+          "name": "test_configure_logging",
+          "args": [],
+          "returns": null,
+          "docstring": "Test that logging is configured correctly",
+          "is_async": false
+        },
+        {
+          "name": "test_artifacts_directory",
+          "args": [],
+          "returns": null,
+          "docstring": "Test artifacts directory creation",
+          "is_async": false
+        },
+        {
+          "name": "test_logging_configuration",
+          "args": [],
+          "returns": null,
+          "docstring": "Test that logging can be properly configured",
+          "is_async": false
+        },
+        {
+          "name": "test_logging_output",
+          "args": [
+            "caplog"
+          ],
+          "returns": null,
+          "docstring": "Test that logging output is captured properly",
+          "is_async": false
+        },
+        {
+          "name": "test_root_directory",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "test_log_message",
+          "args": [
+            "caplog"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "tests\\generated\\test_context_builder_v2.py": [
+        {
+          "name": "test_build_llm_context",
+          "args": [],
+          "returns": null,
+          "docstring": "Test that build_llm_context returns proper structure",
+          "is_async": false
+        },
+        {
+          "name": "test_summarize_repo",
+          "args": [],
+          "returns": null,
+          "docstring": "Test repository summarization",
+          "is_async": false
+        },
+        {
+          "name": "test_extract_python_surface",
+          "args": [],
+          "returns": null,
+          "docstring": "Test Python surface extraction - this analyzes actual repo files",
+          "is_async": false
+        },
+        {
+          "name": "test_context_file_creation",
+          "args": [],
+          "returns": null,
+          "docstring": "Test that context.json file is properly created",
+          "is_async": false
+        }
+      ],
+      "tests\\generated\\test_mvp_generated.py": [
+        {
+          "name": "test_basic_functionality",
+          "args": [],
+          "returns": null,
+          "docstring": "Basic test to verify pytest is working",
+          "is_async": false
+        },
+        {
+          "name": "test_simple_math",
+          "args": [],
+          "returns": null,
+          "docstring": "Test basic math operations",
+          "is_async": false
+        },
+        {
+          "name": "add_user",
+          "args": [
+            "name",
+            "email"
+          ],
+          "returns": null,
+          "docstring": "Mock add_user function",
+          "is_async": false
+        },
+        {
+          "name": "validate_email",
+          "args": [
+            "email"
+          ],
+          "returns": null,
+          "docstring": "Mock email validation function",
+          "is_async": false
+        },
+        {
+          "name": "calculate_sum",
+          "args": [
+            "a",
+            "b"
+          ],
+          "returns": null,
+          "docstring": "Mock calculate_sum function",
+          "is_async": false
+        },
+        {
+          "name": "test_user_validation",
+          "args": [],
+          "returns": null,
+          "docstring": "Test user input validation",
+          "is_async": false
+        },
+        {
+          "name": "test_api_endpoints",
+          "args": [],
+          "returns": null,
+          "docstring": "Test API endpoint functionality",
+          "is_async": false
+        },
+        {
+          "name": "test_email_validation",
+          "args": [],
+          "returns": null,
+          "docstring": "Test email validation functionality",
+          "is_async": false
+        },
+        {
+          "name": "test_user_creation",
+          "args": [],
+          "returns": null,
+          "docstring": "Test user creation process",
+          "is_async": false
+        },
+        {
+          "name": "test_data_persistence",
+          "args": [],
+          "returns": null,
+          "docstring": "Test data persistence functionality",
+          "is_async": false
+        },
+        {
+          "name": "test_calculate_sum",
+          "args": [],
+          "returns": null,
+          "docstring": "Test sum calculation",
+          "is_async": false
+        },
+        {
+          "name": "test_validate_email_basic",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "test_validate_email_edge_cases",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "test_calculate_sum_basic",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "test_calculate_sum_edge_cases",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "tests\\generated\\test_mvp_generated_fixed.py": [
+        {
+          "name": "test_basic_functionality",
+          "args": [],
+          "returns": null,
+          "docstring": "Basic test to verify pytest is working",
+          "is_async": false
+        },
+        {
+          "name": "test_simple_math",
+          "args": [],
+          "returns": null,
+          "docstring": "Test basic math operations",
+          "is_async": false
+        },
+        {
+          "name": "test_string_operations",
+          "args": [],
+          "returns": null,
+          "docstring": "Test string operations",
+          "is_async": false
+        },
+        {
+          "name": "test_list_operations",
+          "args": [],
+          "returns": null,
+          "docstring": "Test list operations",
+          "is_async": false
+        }
+      ],
+      "tests\\generated\\test_platform_functionality.py": [
+        {
+          "name": "test_basic_functionality",
+          "args": [],
+          "returns": null,
+          "docstring": "Basic test to verify pytest is working",
+          "is_async": false
+        },
+        {
+          "name": "test_simple_math",
+          "args": [],
+          "returns": null,
+          "docstring": "Test basic math operations",
+          "is_async": false
+        },
+        {
+          "name": "test_string_operations",
+          "args": [],
+          "returns": null,
+          "docstring": "Test string operations",
+          "is_async": false
+        },
+        {
+          "name": "test_list_operations",
+          "args": [],
+          "returns": null,
+          "docstring": "Test list operations",
+          "is_async": false
+        },
+        {
+          "name": "test_dict_operations",
+          "args": [],
+          "returns": null,
+          "docstring": "Test dictionary operations",
+          "is_async": false
+        },
+        {
+          "name": "test_file_path_operations",
+          "args": [],
+          "returns": null,
+          "docstring": "Test Path operations",
+          "is_async": false
+        },
+        {
+          "name": "test_json_operations",
+          "args": [],
+          "returns": null,
+          "docstring": "Test JSON serialization/deserialization",
+          "is_async": false
+        },
+        {
+          "name": "test_parametrized_double",
+          "args": [
+            "input_val",
+            "expected"
+          ],
+          "returns": null,
+          "docstring": "Test parametrized function - double a number",
+          "is_async": false
+        },
+        {
+          "name": "test_exception_handling",
+          "args": [],
+          "returns": null,
+          "docstring": "Test exception handling",
+          "is_async": false
+        },
+        {
+          "name": "test_platform_specific_functionality",
+          "args": [],
+          "returns": null,
+          "docstring": "Test functionality specific to our platform",
+          "is_async": false
+        }
+      ],
+      "tests\\generated\\test_simple_generated.py": [
+        {
+          "name": "test_basic_functionality",
+          "args": [],
+          "returns": null,
+          "docstring": "Basic test to prove generation works",
+          "is_async": false
+        },
+        {
+          "name": "test_sample_math",
+          "args": [],
+          "returns": null,
+          "docstring": "Test simple math operations",
+          "is_async": false
+        },
+        {
+          "name": "test_string_operations",
+          "args": [],
+          "returns": null,
+          "docstring": "Test string operations",
+          "is_async": false
+        }
+      ],
+      "tests\\generated\\__init__.py": [],
+      "tests\\generated_by_llm\\test_code_analyzer_generated.py": [
+        {
+          "name": "test_analyze_function_for_testing",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "test_analyze_python_file",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "test_generate_test_guidance",
+          "args": [],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "tests\\generated_by_llm\\__init__.py": [],
+      "tests\\integration\\__init__.py": [],
+      "tests\\unit\\test_basic.py": [
+        {
+          "name": "test_stack_detection",
+          "args": [],
+          "returns": null,
+          "docstring": "Test stack detection works",
+          "is_async": false
+        },
+        {
+          "name": "test_imports",
+          "args": [],
+          "returns": null,
+          "docstring": "Test that all imports work",
+          "is_async": false
+        }
+      ],
+      "tests\\unit\\test_sample_generated.py": [
+        {
+          "name": "test_basic_assertion",
+          "args": [
+            "self"
+          ],
+          "returns": null,
+          "docstring": "Test basic assertions work",
+          "is_async": false
+        },
+        {
+          "name": "test_list_operations",
+          "args": [
+            "self"
+          ],
+          "returns": null,
+          "docstring": "Test list operations",
+          "is_async": false
+        },
+        {
+          "name": "test_exception_handling",
+          "args": [
+            "self"
+          ],
+          "returns": null,
+          "docstring": "Test exception handling with pytest.raises",
+          "is_async": false
+        },
+        {
+          "name": "test_square_function",
+          "args": [
+            "self",
+            "input_val",
+            "expected"
+          ],
+          "returns": null,
+          "docstring": "Test parametrized square function",
+          "is_async": false
+        },
+        {
+          "name": "test_standard_library_imports",
+          "args": [
+            "self"
+          ],
+          "returns": null,
+          "docstring": "Test standard library imports",
+          "is_async": false
+        },
+        {
+          "name": "test_pytest_functionality",
+          "args": [
+            "self"
+          ],
+          "returns": null,
+          "docstring": "Test pytest-specific functionality",
+          "is_async": false
+        },
+        {
+          "name": "square",
+          "args": [
+            "x"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "tests\\unit\\__init__.py": [],
+      "tools\\context_builder_old.py": [
+        {
+          "name": "detect_framework_and_conventions",
+          "args": [
+            "stack"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Detect testing frameworks and conventions",
+          "is_async": false
+        },
+        {
+          "name": "analyze_dependencies",
+          "args": [
+            "stack"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Analyze project dependencies and versions",
+          "is_async": false
+        },
+        {
+          "name": "scan_existing_tests",
+          "args": [
+            "stack",
+            "conventions"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Scan existing test files to understand current test patterns",
+          "is_async": false
+        },
+        {
+          "name": "get_security_constraints",
+          "args": [],
+          "returns": "Dict[str, Any]",
+          "docstring": "Define security constraints for LLM-generated code",
+          "is_async": false
+        },
+        {
+          "name": "build_llm_context",
+          "args": [],
+          "returns": "Dict[str, Any]",
+          "docstring": "Build comprehensive context for LLM test generation\nReturns structured data to prevent hallucination",
+          "is_async": false
+        },
+        {
+          "name": "detect_stack",
+          "args": [],
+          "returns": "str",
+          "docstring": "Detect project technology stack",
+          "is_async": false
+        },
+        {
+          "name": "build_repository_manifest",
+          "args": [],
+          "returns": "Dict[str, Any]",
+          "docstring": "Build repository file manifest and metadata",
+          "is_async": false
+        },
+        {
+          "name": "extract_public_surface",
+          "args": [
+            "stack"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Extract public API surface for the detected stack",
+          "is_async": false
+        },
+        {
+          "name": "get_generation_guidelines",
+          "args": [
+            "stack"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Get stack-specific test generation guidelines",
+          "is_async": false
+        },
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "CLI entry point",
+          "is_async": false
+        },
+        {
+          "name": "extract_python_surface",
+          "args": [
+            "file_path"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Extract Python functions, classes, and methods",
+          "is_async": false
+        },
+        {
+          "name": "extract_javascript_surface",
+          "args": [
+            "file_path"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Extract JavaScript/TypeScript functions and classes (regex-based)",
+          "is_async": false
+        },
+        {
+          "name": "extract_java_surface",
+          "args": [
+            "file_path"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Extract Java public methods and classes (regex-based)",
+          "is_async": false
+        }
+      ],
+      "tools\\context_builder_v2.py": [
+        {
+          "name": "summarize_repo",
+          "args": [],
+          "returns": "Dict[str, Any]",
+          "docstring": "Generate a comprehensive repository manifest.",
+          "is_async": false
+        },
+        {
+          "name": "extract_python_surface",
+          "args": [],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Extract public functions and classes from Python files.",
+          "is_async": false
+        },
+        {
+          "name": "extract_public_surface",
+          "args": [],
+          "returns": "Dict[str, List[Dict[str, Any]]]",
+          "docstring": "Extract public API surface for all detected languages.",
+          "is_async": false
+        },
+        {
+          "name": "build_llm_context",
+          "args": [],
+          "returns": "Dict[str, Any]",
+          "docstring": "Build comprehensive context for LLM test generation.",
+          "is_async": false
+        },
+        {
+          "name": "get_priority",
+          "args": [
+            "symbol"
+          ],
+          "returns": null,
+          "docstring": null,
+          "is_async": false
+        }
+      ],
+      "tools\\diff_context_builder.py": [],
+      "tools\\enhanced_test_generator.py": [
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "Main entry point",
+          "is_async": false
+        },
+        {
+          "name": "load_context_bundle",
+          "args": [
+            "self"
+          ],
+          "returns": "Dict",
+          "docstring": "Load the context bundle with error handling",
+          "is_async": false
+        },
+        {
+          "name": "build_enhanced_prompt",
+          "args": [
+            "self",
+            "bundle",
+            "module_path"
+          ],
+          "returns": "Optional[str]",
+          "docstring": "Build an enhanced prompt with better context and validation",
+          "is_async": false
+        },
+        {
+          "name": "call_ollama_with_retry",
+          "args": [
+            "self",
+            "prompt"
+          ],
+          "returns": "Optional[str]",
+          "docstring": "Call Ollama with retry logic and better error handling",
+          "is_async": false
+        },
+        {
+          "name": "extract_and_validate_code",
+          "args": [
+            "self",
+            "llm_response"
+          ],
+          "returns": "Optional[str]",
+          "docstring": "Extract Python code from LLM response and validate it",
+          "is_async": false
+        },
+        {
+          "name": "save_test_file",
+          "args": [
+            "self",
+            "code",
+            "module_path"
+          ],
+          "returns": "Path",
+          "docstring": "Save the generated test code to a file",
+          "is_async": false
+        },
+        {
+          "name": "generate_tests_for_module",
+          "args": [
+            "self",
+            "module_path"
+          ],
+          "returns": "Optional[Path]",
+          "docstring": "Generate tests for a specific module",
+          "is_async": false
+        },
+        {
+          "name": "generate_all_tests",
+          "args": [
+            "self"
+          ],
+          "returns": "List[Path]",
+          "docstring": "Generate tests for all modules in the context bundle",
+          "is_async": false
+        }
+      ],
+      "tools\\evaluation_harness_v2.py": [
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "CLI entry point for evaluation harness.",
+          "is_async": false
+        },
+        {
+          "name": "default_config",
+          "args": [
+            "self"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Default evaluation configuration.",
+          "is_async": false
+        },
+        {
+          "name": "evaluate_tests",
+          "args": [
+            "self",
+            "test_files",
+            "context"
+          ],
+          "returns": "EvaluationReport",
+          "docstring": "Run comprehensive evaluation on test files.",
+          "is_async": false
+        }
+      ],
+      "tools\\fast_llm_generator.py": [
+        {
+          "name": "generate_minimal_prompt",
+          "args": [
+            "file_info"
+          ],
+          "returns": "str",
+          "docstring": "Create a minimal, focused prompt for fast generation.",
+          "is_async": false
+        },
+        {
+          "name": "fast_llm_generate",
+          "args": [
+            "context"
+          ],
+          "returns": "int",
+          "docstring": "Generate tests quickly with minimal prompts.",
+          "is_async": false
+        },
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "Main fast generation workflow.",
+          "is_async": false
+        }
+      ],
+      "tools\\fix_test_imports.py": [
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "Run the test import fixer",
+          "is_async": false
+        },
+        {
+          "name": "find_test_files",
+          "args": [
+            "self",
+            "test_dirs"
+          ],
+          "returns": "List[Path]",
+          "docstring": "Find all test files in specified directories",
+          "is_async": false
+        },
+        {
+          "name": "fix_import_paths",
+          "args": [
+            "self",
+            "file_path"
+          ],
+          "returns": "bool",
+          "docstring": "Fix common import path issues in a test file",
+          "is_async": false
+        },
+        {
+          "name": "fix_all_tests",
+          "args": [
+            "self",
+            "test_dirs"
+          ],
+          "returns": "dict",
+          "docstring": "Fix import issues in all test files",
+          "is_async": false
+        }
+      ],
+      "tools\\genai_test_runner_old.py": [
+        {
+          "name": "run",
+          "args": [
+            "cmd",
+            "cwd",
+            "allow_fail",
+            "env"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Execute shell command with comprehensive logging and error handling.",
+          "is_async": false
+        },
+        {
+          "name": "detect_stack",
+          "args": [
+            "override"
+          ],
+          "returns": "str",
+          "docstring": "Detect project technology stack",
+          "is_async": false
+        },
+        {
+          "name": "ensure_dependencies",
+          "args": [
+            "stack"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Install project dependencies based on stack",
+          "is_async": false
+        },
+        {
+          "name": "llm_generate_or_patch_tests",
+          "args": [
+            "stack",
+            "enable_llm"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Optional LLM test generation/patching phase",
+          "is_async": false
+        },
+        {
+          "name": "run_native_tests",
+          "args": [
+            "stack"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Execute native test framework for the detected stack",
+          "is_async": false
+        },
+        {
+          "name": "collect_test_reports",
+          "args": [
+            "stack"
+          ],
+          "returns": "List[str]",
+          "docstring": "Collect test and coverage reports based on stack",
+          "is_async": false
+        },
+        {
+          "name": "generate_summary_report",
+          "args": [
+            "report_data"
+          ],
+          "returns": "str",
+          "docstring": "Generate human-readable summary",
+          "is_async": false
+        },
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "Main execution function",
+          "is_async": false
+        }
+      ],
+      "tools\\hitl_validator.py": [],
+      "tools\\hitl_validator_v2.py": [
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "CLI entry point for HITL validator.",
+          "is_async": false
+        },
+        {
+          "name": "create_review_artifact",
+          "args": [
+            "self",
+            "generated_tests",
+            "context"
+          ],
+          "returns": "str",
+          "docstring": "Create a structured review artifact for human validation.",
+          "is_async": false
+        },
+        {
+          "name": "approve_review",
+          "args": [
+            "self",
+            "review_id",
+            "reviewer_name",
+            "approved_items"
+          ],
+          "returns": "bool",
+          "docstring": "Approve a review and update the artifact.",
+          "is_async": false
+        },
+        {
+          "name": "reject_review",
+          "args": [
+            "self",
+            "review_id",
+            "reviewer_name",
+            "reason"
+          ],
+          "returns": "bool",
+          "docstring": "Reject a review with reason.",
+          "is_async": false
+        },
+        {
+          "name": "list_pending_reviews",
+          "args": [
+            "self"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "List all pending reviews.",
+          "is_async": false
+        },
+        {
+          "name": "get_review_status",
+          "args": [
+            "self",
+            "review_id"
+          ],
+          "returns": "Optional[Dict[str, Any]]",
+          "docstring": "Get status of a specific review.",
+          "is_async": false
+        }
+      ],
+      "tools\\human_file_check.py": [],
+      "tools\\lightweight_context_builder.py": [
+        {
+          "name": "extract_function_signatures",
+          "args": [
+            "file_path"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Extract just function signatures and docstrings for LLM context.",
+          "is_async": false
+        },
+        {
+          "name": "extract_class_info",
+          "args": [
+            "file_path"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Extract just class names and public methods.",
+          "is_async": false
+        },
+        {
+          "name": "build_lightweight_context",
+          "args": [],
+          "returns": "Dict[str, Any]",
+          "docstring": "Build minimal context optimized for fast LLM generation.",
+          "is_async": false
+        }
+      ],
+      "tools\\policy_checker_v2.py": [
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "CLI entry point for policy checker.",
+          "is_async": false
+        },
+        {
+          "name": "default_config",
+          "args": [
+            "self"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Default policy configuration.",
+          "is_async": false
+        },
+        {
+          "name": "check_file",
+          "args": [
+            "self",
+            "file_path"
+          ],
+          "returns": "List[PolicyViolation]",
+          "docstring": "Check a single test file for policy violations.",
+          "is_async": false
+        },
+        {
+          "name": "check_directory",
+          "args": [
+            "self",
+            "directory"
+          ],
+          "returns": "Dict[str, List[PolicyViolation]]",
+          "docstring": "Check all test files in a directory.",
+          "is_async": false
+        },
+        {
+          "name": "validate_syntax",
+          "args": [
+            "self",
+            "file_path"
+          ],
+          "returns": "bool",
+          "docstring": "Validate syntax using language-specific tools.",
+          "is_async": false
+        },
+        {
+          "name": "generate_report",
+          "args": [
+            "self",
+            "results"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Generate a comprehensive policy check report.",
+          "is_async": false
+        }
+      ],
+      "tools\\production_llm_manager.py": [
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "Main production LLM workflow.",
+          "is_async": false
+        },
+        {
+          "name": "generate_tests",
+          "args": [
+            "self",
+            "context"
+          ],
+          "returns": "int",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "generate_tests",
+          "args": [
+            "self",
+            "context"
+          ],
+          "returns": "int",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "generate_tests",
+          "args": [
+            "self",
+            "context"
+          ],
+          "returns": "int",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "generate_tests",
+          "args": [
+            "self",
+            "context"
+          ],
+          "returns": "int",
+          "docstring": null,
+          "is_async": false
+        },
+        {
+          "name": "generate_tests_with_fallback",
+          "args": [
+            "self",
+            "context"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Try strategies in order until one succeeds.",
+          "is_async": false
+        }
+      ],
+      "tools\\unified_test_runner.py": [
+        {
+          "name": "run",
+          "args": [
+            "cmd",
+            "cwd",
+            "allow_fail",
+            "env"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Execute shell command with comprehensive logging and error handling.",
+          "is_async": false
+        },
+        {
+          "name": "detect_stack",
+          "args": [],
+          "returns": "str",
+          "docstring": "Detect project stack based on config files and structure.",
+          "is_async": false
+        },
+        {
+          "name": "ensure_deps",
+          "args": [
+            "stack"
+          ],
+          "returns": "List[Dict[str, Any]]",
+          "docstring": "Install dependencies based on detected stack.",
+          "is_async": false
+        },
+        {
+          "name": "llm_generate_or_patch_tests",
+          "args": [
+            "stack"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Optional: call LLM to create/patch tests BEFORE running native tests.\n\nThe LLM should only write into safe paths:\n  - python: tests/\n  - node: __tests__/ or tests/\n  - java: src/test/java/\n\nThis integrates with context_builder and existing LLM agent.",
+          "is_async": false
+        },
+        {
+          "name": "get_human_approval",
+          "args": [
+            "test_file_path"
+          ],
+          "returns": "bool",
+          "docstring": "Get human approval for generated test file.",
+          "is_async": false
+        },
+        {
+          "name": "generate_tests_for_symbols",
+          "args": [
+            "symbols"
+          ],
+          "returns": "int",
+          "docstring": "Generate tests for discovered Python symbols using LLM with human approval.",
+          "is_async": false
+        },
+        {
+          "name": "run_native_tests",
+          "args": [
+            "stack"
+          ],
+          "returns": "Dict[str, Any]",
+          "docstring": "Run native test framework based on detected stack.",
+          "is_async": false
+        },
+        {
+          "name": "collect_reports",
+          "args": [
+            "stack"
+          ],
+          "returns": "List[str]",
+          "docstring": "Collect test reports and coverage files based on stack.",
+          "is_async": false
+        },
+        {
+          "name": "main",
+          "args": [],
+          "returns": null,
+          "docstring": "Main orchestration function.",
+          "is_async": false
+        },
+        {
+          "name": "parse_args_and_run",
+          "args": [],
+          "returns": null,
+          "docstring": "Parse command line arguments and run the main function.",
+          "is_async": false
+        }
+      ]
+    },
+    "universal_test_examples": [
+      "\n# Example 1: Basic function test\ndef test_function_basic():\n    result = my_function(\"input\")\n    assert result is not None\n    assert isinstance(result, expected_type)\n",
+      "\n# Example 2: Exception handling test\ndef test_function_handles_invalid_input():\n    with pytest.raises(ValueError):\n        my_function(None)\n    \n    with pytest.raises(TypeError):\n        my_function(123)  # when string expected\n",
+      "\n# Example 3: Mock external dependencies\n@patch('module.external_api_call')\ndef test_function_with_mock(mock_api):\n    mock_api.return_value = {\"status\": \"success\"}\n    result = my_function_that_calls_api()\n    assert result[\"status\"] == \"success\"\n    mock_api.assert_called_once()\n",
+      "\n# Example 4: Edge cases\ndef test_function_edge_cases():\n    # Test empty input\n    assert my_function(\"\") == expected_empty_result\n    \n    # Test large input\n    large_input = \"x\" * 1000\n    result = my_function(large_input)\n    assert len(result) > 0\n    \n    # Test special characters\n    special_input = \"test@#$%\"\n    result = my_function(special_input)\n    assert result is not None\n",
+      "\n# Example 5: Configuration/settings test\ndef test_config_values():\n    from src.config import SETTING_NAME\n    assert isinstance(SETTING_NAME, int)\n    assert SETTING_NAME > 0\n"
+    ],
+    "testing_guidelines": {
+      "import_rules": [
+        "Only import modules that exist in available_imports",
+        "Use 'from unittest.mock import patch, Mock' for mocking",
+        "Import local modules using relative paths (e.g., 'from src.module import function')",
+        "Always define test data before using it"
+      ],
+      "test_patterns": [
+        "Test basic functionality with valid inputs",
+        "Test edge cases (empty, None, invalid inputs)",
+        "Test exception handling with pytest.raises",
+        "Use mocks for external dependencies",
+        "Assert both return values and types"
+      ],
+      "common_mistakes": [
+        "Don't use undefined variables",
+        "Don't import non-existent modules",
+        "Don't hardcode expected values without context",
+        "Don't assume specific data formats without checking"
+      ]
+    }
+  },
+  "targets": {},
+  "analysis_metadata": {
+    "total_python_files": 40,
+    "files_analyzed": 0,
+    "frameworks_detected": [
+      "flask",
+      "django",
+      "fastapi",
+      "pytest",
+      "pandas",
+      "numpy",
+      "sklearn",
+      "tensorflow",
+      "torch",
+      "gradio",
+      "streamlit"
+    ],
+    "has_tests_directory": true
+  }
+}

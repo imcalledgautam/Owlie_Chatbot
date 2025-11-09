@@ -1,0 +1,3 @@
+/workspaces/genai-test-platform/coverage.xml
+/workspaces/genai-test-platform/test-results.xml
+/workspaces/genai-test-platform/.coverage

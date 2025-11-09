@@ -1,0 +1,189 @@
+{
+  "timestamp": "2025-11-05T22:46:27.830617Z",
+  "repository_root": "/workspaces/genai-test-platform",
+  "stack": "python",
+  "total_checks": 13,
+  "passed_checks": 4,
+  "overall_score": 0.26829268292682934,
+  "overall_passed": false,
+  "validation_results": [
+    {
+      "check_name": "syntax_validation",
+      "passed": false,
+      "score": 0.0,
+      "message": "Syntax check failed: [Errno 2] No such file or directory: 'tests/unit/test_genai_test_runner.py'",
+      "details": null,
+      "execution_time": 0.002454
+    },
+    {
+      "check_name": "policy_compliance",
+      "passed": false,
+      "score": 0.8,
+      "message": "Policy check: 1 errors, 0 warnings (first: Failed to parse file: [Errno 2] No such file or directory: 'tests/unit/test_genai_test_runner.py')",
+      "details": {
+        "violations": 1,
+        "errors": 1,
+        "warnings": 0
+      },
+      "execution_time": 0.091373
+    },
+    {
+      "check_name": "import_validation",
+      "passed": false,
+      "score": 0.0,
+      "message": "Import check failed: [Errno 2] No such file or directory: 'tests/unit/test_genai_test_runner.py'",
+      "details": null,
+      "execution_time": 0.003201
+    },
+    {
+      "check_name": "execution_test",
+      "passed": false,
+      "score": 0.0,
+      "message": "Test execution failed",
+      "details": {
+        "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.13, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python\ncachedir: .pytest_cache\nrootdir: /workspaces/genai-test-platform\nplugins: cov-7.0.0\ncollecting ... collected 0 items\n\n============================ no tests ran in 0.03s =============================\n",
+        "stderr": "ERROR: file or directory not found: tests/unit/test_genai_test_runner.py\n\n"
+      },
+      "execution_time": 0.422419
+    },
+    {
+      "check_name": "performance_test",
+      "passed": true,
+      "score": 1.0,
+      "message": "Performance acceptable (0.33s)",
+      "details": {
+        "execution_time": 0.334126
+      },
+      "execution_time": 0.334126
+    },
+    {
+      "check_name": "coverage_analysis",
+      "passed": true,
+      "score": 0.5,
+      "message": "Coverage check failed: [Errno 2] No such file or directory: 'tests/unit/test_genai_test_runner.py'",
+      "details": null,
+      "execution_time": 0.0
+    },
+    {
+      "check_name": "syntax_validation",
+      "passed": false,
+      "score": 0.0,
+      "message": "Syntax check failed: [Errno 2] No such file or directory: 'tests/unit/test_policy_checker.py'",
+      "details": null,
+      "execution_time": 0.003419
+    },
+    {
+      "check_name": "policy_compliance",
+      "passed": false,
+      "score": 0.8,
+      "message": "Policy check: 1 errors, 0 warnings (first: Failed to parse file: [Errno 2] No such file or directory: 'tests/unit/test_policy_checker.py')",
+      "details": {
+        "violations": 1,
+        "errors": 1,
+        "warnings": 0
+      },
+      "execution_time": 0.003664
+    },
+    {
+      "check_name": "import_validation",
+      "passed": false,
+      "score": 0.0,
+      "message": "Import check failed: [Errno 2] No such file or directory: 'tests/unit/test_policy_checker.py'",
+      "details": null,
+      "execution_time": 0.003232
+    },
+    {
+      "check_name": "execution_test",
+      "passed": false,
+      "score": 0.0,
+      "message": "Test execution failed",
+      "details": {
+        "stdout": "============================= test session starts ==============================\nplatform linux -- Python 3.11.13, pytest-8.4.2, pluggy-1.6.0 -- /usr/local/bin/python\ncachedir: .pytest_cache\nrootdir: /workspaces/genai-test-platform\nplugins: cov-7.0.0\ncollecting ... collected 0 items\n\n============================ no tests ran in 0.03s =============================\n",
+        "stderr": "ERROR: file or directory not found: tests/unit/test_policy_checker.py\n\n"
+      },
+      "execution_time": 0.352397
+    },
+    {
+      "check_name": "performance_test",
+      "passed": true,
+      "score": 1.0,
+      "message": "Performance acceptable (0.41s)",
+      "details": {
+        "execution_time": 0.410044
+      },
+      "execution_time": 0.410044
+    },
+    {
+      "check_name": "coverage_analysis",
+      "passed": true,
+      "score": 0.5,
+      "message": "Coverage check failed: [Errno 2] No such file or directory: 'tests/unit/test_policy_checker.py'",
+      "details": null,
+      "execution_time": 0.0
+    },
+    {
+      "check_name": "hitl_approval",
+      "passed": false,
+      "score": 0.0,
+      "message": "No HITL approval found",
+      "details": null,
+      "execution_time": 0.0
+    }
+  ],
+  "summary": {
+    "by_category": {
+      "syntax_validation": {
+        "passed": 0,
+        "total": 2,
+        "avg_score": 0.0
+      },
+      "policy_compliance": {
+        "passed": 0,
+        "total": 2,
+        "avg_score": 0.8
+      },
+      "import_validation": {
+        "passed": 0,
+        "total": 2,
+        "avg_score": 0.0
+      },
+      "execution_test": {
+        "passed": 0,
+        "total": 2,
+        "avg_score": 0.0
+      },
+      "performance_test": {
+        "passed": 2,
+        "total": 2,
+        "avg_score": 1.0
+      },
+      "coverage_analysis": {
+        "passed": 2,
+        "total": 2,
+        "avg_score": 0.5
+      },
+      "hitl_approval": {
+        "passed": 0,
+        "total": 1,
+        "avg_score": 0.0
+      }
+    },
+    "total_execution_time": 1.626329,
+    "critical_failures": [
+      "syntax_validation",
+      "policy_compliance",
+      "import_validation",
+      "execution_test",
+      "syntax_validation",
+      "policy_compliance",
+      "import_validation",
+      "execution_test"
+    ]
+  },
+  "recommendations": [
+    "\u274c Fix critical validation failures before merging",
+    "\u26a0\ufe0f Address policy violations for better test quality",
+    "\u26a0\ufe0f Address policy violations for better test quality",
+    "\ud83d\udc65 Obtain human approval before merging"
+  ]
+}

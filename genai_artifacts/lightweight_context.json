@@ -1,0 +1,134 @@
+{
+  "timestamp": "2025-11-06T16:13:41.841240Z",
+  "mode": "lightweight_generation",
+  "file_count": 4,
+  "files": [
+    {
+      "file": "tools/context_builder_old.py",
+      "module": "tools.context_builder_old",
+      "functions": [
+        {
+          "name": "detect_framework_and_conventions",
+          "signature": "def detect_framework_and_conventions(stack):",
+          "docstring": "Detect testing frameworks and conventions",
+          "line": 169
+        },
+        {
+          "name": "analyze_dependencies",
+          "signature": "def analyze_dependencies(stack):",
+          "docstring": "Analyze project dependencies and versions",
+          "line": 251
+        },
+        {
+          "name": "scan_existing_tests",
+          "signature": "def scan_existing_tests(stack, conventions):",
+          "docstring": "Scan existing test files to understand current test patterns",
+          "line": 304
+        }
+      ],
+      "classes": [
+        {
+          "name": "PublicSurfaceExtractor",
+          "methods": [
+            "extract_python_surface",
+            "extract_javascript_surface",
+            "extract_java_surface"
+          ],
+          "line": 34
+        }
+      ],
+      "size": "medium"
+    },
+    {
+      "file": "tools/context_builder_v2.py",
+      "module": "tools.context_builder_v2",
+      "functions": [
+        {
+          "name": "summarize_repo",
+          "signature": "def summarize_repo():",
+          "docstring": "Generate a comprehensive repository manifest.",
+          "line": 26
+        },
+        {
+          "name": "extract_python_surface",
+          "signature": "def extract_python_surface():",
+          "docstring": "Extract public functions and classes from Python files.",
+          "line": 85
+        },
+        {
+          "name": "extract_public_surface",
+          "signature": "def extract_public_surface():",
+          "docstring": "Extract public API surface for all detected languages.",
+          "line": 139
+        }
+      ],
+      "classes": [],
+      "size": "medium"
+    },
+    {
+      "file": "tools/evaluation_harness_v2.py",
+      "module": "tools.evaluation_harness_v2",
+      "functions": [
+        {
+          "name": "main",
+          "signature": "def main():",
+          "docstring": "CLI entry point for evaluation harness.",
+          "line": 658
+        },
+        {
+          "name": "default_config",
+          "signature": "def default_config(self):",
+          "docstring": "Default evaluation configuration.",
+          "line": 60
+        },
+        {
+          "name": "evaluate_tests",
+          "signature": "def evaluate_tests(self, test_files, context):",
+          "docstring": "Run comprehensive evaluation on test files.",
+          "line": 87
+        }
+      ],
+      "classes": [
+        {
+          "name": "ValidationResult",
+          "methods": [],
+          "line": 30
+        },
+        {
+          "name": "EvaluationReport",
+          "methods": [],
+          "line": 40
+        }
+      ],
+      "size": "medium"
+    },
+    {
+      "file": "tools/fast_llm_generator.py",
+      "module": "tools.fast_llm_generator",
+      "functions": [
+        {
+          "name": "generate_minimal_prompt",
+          "signature": "def generate_minimal_prompt(file_info):",
+          "docstring": "Create a minimal, focused prompt for fast generation.",
+          "line": 17
+        },
+        {
+          "name": "fast_llm_generate",
+          "signature": "def fast_llm_generate(context):",
+          "docstring": "Generate tests quickly with minimal prompts.",
+          "line": 47
+        },
+        {
+          "name": "main",
+          "signature": "def main():",
+          "docstring": "Main fast generation workflow.",
+          "line": 126
+        }
+      ],
+      "classes": [],
+      "size": "small"
+    }
+  ],
+  "test_framework": "pytest",
+  "import_style": "from {module} import {symbols}"
+}

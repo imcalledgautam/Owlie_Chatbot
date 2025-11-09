@@ -1,0 +1,34 @@
+{
+  "timestamp": "2025-11-07T02:19:58.998900Z",
+  "repository_root": "C:\\Users\\GautamNaik\\Desktop\\Projects\\genai-test-platform",
+  "manifest": {
+    "error": "Failed to summarize repository: [WinError 1920] The file cannot be accessed by the system: 'C:\\\\Users\\\\GautamNaik\\\\Desktop\\\\Projects\\\\genai-test-platform\\\\.venv\\\\lib64'",
+    "total_files": 0,
+    "files_sample": [],
+    "config_files": {},
+    "languages": {},
+    "test_directories": []
+  },
+  "public_surface": {
+    "python": [],
+    "javascript": [],
+    "java": []
+  },
+  "conventions": {
+    "python": {
+      "tests_dir": "tests",
+      "test_file_pattern": "test_*.py",
+      "framework": "pytest"
+    },
+    "javascript": {
+      "tests_dir": "__tests__",
+      "test_file_pattern": "*.test.js",
+      "framework": "jest"
+    },
+    "java": {
+      "tests_dir": "src/test/java",
+      "test_file_pattern": "*Test.java",
+      "framework": "junit"
+    }
+  }
+}

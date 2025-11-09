@@ -1,4 +1,4 @@
-name: Enhanced LLM Test Generator - Universal (WITH IMPORT FIX)
+name: Enhanced LLM Test Generator v2 - Better Import Validation
 
 on:
   workflow_dispatch:
@@ -7,17 +7,12 @@ on:
         description: 'Specific files to test (comma-separated)'
         required: false
         type: string
-      fix_imports:
-        description: 'Enable import validation fix'
-        required: false
-        type: boolean
-        default: true
   push:
     branches: [ main, master ]
     paths: ['**.py']
 
 jobs:
-  enhanced-test-generation:
+  enhanced-test-generation-v2:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
@@ -42,34 +37,81 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      - name: Create Enhanced Context Builder
+      - name: Create Enhanced Context Builder with Better Import Analysis
         run: |
           mkdir -p ci_artifacts
           
-          cat > enhanced_context_builder.py << 'EOF'
+          cat > enhanced_context_builder_v2.py << 'EOF'
           import os, re, json, subprocess, ast, sys
           from pathlib import Path
           from typing import Dict, List, Set, Any, Optional
           
           class UniversalContextAnalyzer:
-              """Universal context analyzer that works across any Python repository"""
+              """Enhanced universal context analyzer with better import validation"""
               
               def __init__(self, root_path: Path):
                   self.root = Path(root_path).resolve()
+                  self.python_files = self._safe_find_python_files()
+                  self.actual_modules = self._discover_actual_modules()
+              
+              def _safe_find_python_files(self):
+                  """Safely find Python files"""
+                  python_files = []
+                  skip_dirs = {'.git', '.venv', 'venv', '__pycache__', 'node_modules'}
+                  
                   try:
-                      self.python_files = list(self.root.rglob("*.py"))
-                      # Filter out common non-app directories
-                      self.python_files = [f for f in self.python_files 
-                                         if not any(part.startswith('.') or part in ['__pycache__', 'node_modules', 'venv', 'env'] 
-                                                  for part in f.parts)]
-                  except (PermissionError, OSError):
-                      self.python_files = []
-                      for py_file in Path(root_path).glob("**/*.py"):
-                          try:
-                              if py_file.is_file():
-                                  self.python_files.append(py_file)
-                          except (PermissionError, OSError):
-                              continue
+                      for py_file in self.root.rglob("*.py"):
+                          if not any(part.startswith('.') or part in skip_dirs for part in py_file.parts):
+                              try:
+                                  if py_file.exists() and py_file.is_file():
+                                      python_files.append(py_file)
+                              except (OSError, PermissionError):
+                                  continue
+                  except (OSError, PermissionError):
+                      # Fallback to manual walk
+                      for root, dirs, files in os.walk(self.root):
+                          dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith('.')]
+                          for file in files:
+                              if file.endswith('.py'):
+                                  try:
+                                      file_path = Path(root) / file
+                                      if file_path.exists():
+                                          python_files.append(file_path)
+                                  except (OSError, PermissionError):
+                                      continue
+                  
+                  return python_files
+              
+              def _discover_actual_modules(self) -> Dict[str, str]:
+                  """Discover actual importable modules in the repository"""
+                  modules = {}
+                  
+                  for py_file in self.python_files:
+                      try:
+                          rel_path = py_file.relative_to(self.root)
+                          path_parts = list(rel_path.parts[:-1])  # Remove .py filename
+                          
+                          # Add the module without extension
+                          if rel_path.name != "__init__.py":
+                              module_name = rel_path.stem
+                              if path_parts:
+                                  full_module = ".".join(path_parts + [module_name])
+                              else:
+                                  full_module = module_name
+                              modules[module_name] = str(rel_path)
+                              modules[full_module] = str(rel_path)
+                          
+                          # Add directory modules (if __init__.py exists)
+                          if rel_path.name == "__init__.py" and path_parts:
+                              dir_module = ".".join(path_parts)
+                              modules[dir_module] = str(rel_path.parent)
+                              modules[path_parts[-1]] = str(rel_path.parent)
+                              
+                      except ValueError:
+                          continue
+                  
+                  print(f"🔍 Discovered actual modules: {list(modules.keys())[:10]}...")
+                  return modules
               
               def scan_all_imports(self) -> Dict[str, Set[str]]:
                   """Scan all Python files and extract available imports"""
@@ -87,7 +129,10 @@ jobs:
                   }
                   all_imports['stdlib'] = stdlib_modules
                   
-                  # Scan for local and external imports
+                  # Add actual local modules
+                  all_imports['local'] = set(self.actual_modules.keys())
+                  
+                  # Scan for external imports in existing code
                   for py_file in self.python_files:
                       try:
                           content = py_file.read_text(encoding='utf-8')
@@ -96,9 +141,7 @@ jobs:
                           for imp in imports:
                               if imp in stdlib_modules:
                                   all_imports['stdlib'].add(imp)
-                              elif self.is_local_module(imp):
-                                  all_imports['local'].add(imp)
-                              else:
+                              elif imp not in self.actual_modules:
                                   all_imports['external'].add(imp)
                                   
                       except Exception:
@@ -121,18 +164,6 @@ jobs:
                   except Exception:
                       pass
                   return imports
-              
-              def is_local_module(self, module_name: str) -> bool:
-                  """Check if a module is local to the repository"""
-                  candidates = [
-                      self.root / f"{module_name}.py",
-                      self.root / module_name / "__init__.py",
-                      self.root / "src" / f"{module_name}.py", 
-                      self.root / "src" / module_name / "__init__.py",
-                      self.root / "app" / f"{module_name}.py",
-                      self.root / "code" / f"{module_name}.py"
-                  ]
-                  return any(c.exists() for c in candidates)
               
               def extract_function_signatures(self) -> Dict[str, List[Dict]]:
                   """Extract function signatures from all Python files"""
@@ -175,8 +206,27 @@ jobs:
                       'has_code_dir': (self.root / 'code').exists(),
                       'has_tests_dir': (self.root / 'tests').exists(),
                       'framework': self.detect_framework(),
-                      'package_files': self.find_package_files()
+                      'package_files': self.find_package_files(),
+                      'directory_structure': self.get_directory_structure()
                   }
+                  return structure
+              
+              def get_directory_structure(self) -> Dict[str, List[str]]:
+                  """Get actual directory structure for import guidance"""
+                  structure = {}
+                  
+                  for py_file in self.python_files[:20]:  # Limit for performance
+                      try:
+                          rel_path = py_file.relative_to(self.root)
+                          parent_dir = str(rel_path.parent) if rel_path.parent.name != '.' else 'root'
+                          
+                          if parent_dir not in structure:
+                              structure[parent_dir] = []
+                          structure[parent_dir].append(rel_path.stem)
+                          
+                      except ValueError:
+                          continue
+                  
                   return structure
               
               def detect_framework(self) -> List[str]:
@@ -222,8 +272,8 @@ jobs:
                   return package_files
           
           def gather_enhanced_context():
-              """Enhanced universal context gathering"""
-              print("🔍 Starting enhanced universal context analysis...")
+              """Enhanced universal context gathering with better import validation"""
+              print("🔍 Starting enhanced universal context analysis v2...")
               
               root = Path.cwd()
               analyzer = UniversalContextAnalyzer(root)
@@ -271,10 +321,12 @@ jobs:
                       except Exception as e:
                           print(f"Error reading {file_path}: {e}")
               
-              # Create enhanced context
+              # Create enhanced context with actual module information
               context = {
                   'files': files_payload,
                   'project_structure': project_structure,
+                  'actual_modules': analyzer.actual_modules,
+                  'directory_structure': project_structure.get('directory_structure', {}),
                   'available_imports': {
                       'stdlib': sorted(list(all_imports['stdlib'])),
                       'local': sorted(list(all_imports['local'])), 
@@ -282,10 +334,11 @@ jobs:
                   },
                   'testing_guidelines': {
                       'import_rules': [
-                          "Only import modules that exist in available_imports",
+                          "CRITICAL: Only import modules that exist in actual_modules or available_imports",
                           "Use 'from unittest.mock import patch, Mock' for mocking",
-                          "Import local modules using correct paths based on project_structure",
-                          "Always define test data before using it"
+                          "Check directory_structure to understand correct import paths",
+                          "Always define test data before using it",
+                          "Do NOT invent module names - only use what exists"
                       ],
                       'test_patterns': [
                           "Test basic functionality with valid inputs",
@@ -294,40 +347,17 @@ jobs:
                           "Use mocks for external dependencies",
                           "Assert both return values and types"
                       ]
-                  },
-                  'universal_test_examples': [
-                      '''
-          # Example 1: Basic function test
-          def test_function_basic():
-              result = my_function("input")
-              assert result is not None
-              assert isinstance(result, expected_type)
-          ''',
-                      '''
-          # Example 2: Exception handling test  
-          def test_function_handles_invalid_input():
-              with pytest.raises(ValueError):
-                  my_function(None)
-          ''',
-                      '''
-          # Example 3: Mock external dependencies
-          @patch('module.external_function')
-          def test_function_with_mock(mock_func):
-              mock_func.return_value = "mocked_result"
-              result = my_function()
-              assert result == "mocked_result"
-              mock_func.assert_called_once()
-          '''
-                  ]
+                  }
               }
               
               # Save context
-              with open('ci_artifacts/enhanced_context.json', 'w') as f:
+              with open('ci_artifacts/enhanced_context_v2.json', 'w') as f:
                   json.dump(context, f, indent=2)
               
-              print(f"✅ Enhanced context created with {len(files_payload)} files")
+              print(f"✅ Enhanced context v2 created with {len(files_payload)} files")
               print(f"🔧 Detected frameworks: {', '.join(project_structure.get('framework', ['None']))}")
               print(f"📦 Available imports: {len(all_imports['local'])} local, {len(all_imports['external'])} external")
+              print(f"🏗️ Actual modules found: {len(analyzer.actual_modules)}")
               
               return context
           
@@ -335,7 +365,7 @@ jobs:
               gather_enhanced_context()
           EOF
           
-          python enhanced_context_builder.py
+          python enhanced_context_builder_v2.py
 
       - name: Install Ollama
         run: |
@@ -347,28 +377,41 @@ jobs:
           ollama pull qwen2.5-coder:1.5b
           ollama list
 
-      - name: Generate Enhanced Tests with Validation
+      - name: Generate Enhanced Tests with Strict Import Validation
         run: |
-          cat > enhanced_test_generator.py << 'EOF'
+          cat > enhanced_test_generator_v2.py << 'EOF'
           import json, requests, os, re, ast
           from pathlib import Path
           
-          def create_enhanced_prompt():
-              return """You are a senior Python test engineer. Create comprehensive pytest tests.
+          def create_enhanced_prompt_v2(context):
+              actual_modules = context.get('actual_modules', {})
+              directory_structure = context.get('directory_structure', {})
+              
+              return f"""You are a senior Python test engineer. Create comprehensive pytest tests.
           
-          CRITICAL REQUIREMENTS:
-          1. ONLY use imports from the available_imports list provided
-          2. Follow the project_structure for correct import paths
-          3. Use the testing_guidelines and examples provided
-          4. Generate syntactically correct Python code only
-          5. Test real functionality, not placeholder code
+          CRITICAL IMPORT RESTRICTIONS:
+          1. ONLY use these ACTUAL modules that exist in the repository: {list(actual_modules.keys())[:20]}
+          2. Do NOT invent or assume any module names
+          3. If you need a module that doesn't exist, use mocks instead
+          4. Directory structure: {directory_structure}
+          
+          AVAILABLE IMPORTS:
+          - Local modules (ONLY these exist): {', '.join(context['available_imports']['local'][:15])}
+          - External libraries: {', '.join(context['available_imports']['external'][:15])}
+          - Standard library: pytest, unittest.mock, os, sys, json, etc.
           
           IMPORT STRATEGY:
-          - For local modules: Check project_structure and use correct paths
-          - For external modules: Only use what's in available_imports['external']
+          - Check actual_modules before importing anything
+          - Use mocks for external dependencies
           - Always include: import pytest, from unittest.mock import patch, Mock
           
-          OUTPUT: Only Python code in ```python ``` blocks."""
+          STRICT RULES:
+          - Test the actual functions that exist in the provided code
+          - Use only imports that are verified to exist
+          - Create realistic test scenarios
+          - Mock external dependencies properly
+          
+          OUTPUT: Only valid Python test code in ```python ``` blocks."""
           
           def call_ollama_api(prompt, model="qwen2.5-coder:1.5b"):
               url = "http://localhost:11434/api/generate"
@@ -379,7 +422,7 @@ jobs:
                   "options": {
                       "temperature": 0.1,
                       "top_p": 0.9,
-                      "num_predict": 2000
+                      "num_predict": 1500
                   }
               }
               
@@ -418,56 +461,83 @@ jobs:
               
               return None
           
-          def validate_and_fix_imports(code, context):
-              """Validate and fix import issues"""
+          def strict_import_validation(code, context):
+              """Strict import validation and fixing"""
               lines = code.split('\n')
               fixed_lines = []
-              available_locals = context.get('available_imports', {}).get('local', [])
-              available_externals = context.get('available_imports', {}).get('external', [])
+              actual_modules = context.get('actual_modules', {})
+              available_locals = set(context.get('available_imports', {}).get('local', []))
+              available_externals = set(context.get('available_imports', {}).get('external', []))
               
-              imports_added = set()
+              essential_imports = set()
               
               for line in lines:
-                  original_line = line
+                  original_line = line.strip()
                   
-                  # Fix common import issues
-                  if line.strip().startswith('from ') and ' import ' in line:
-                      # Extract module name
-                      match = re.match(r'from\s+(\w+)\s+import', line.strip())
+                  # Check import statements
+                  if original_line.startswith('from ') and ' import ' in original_line:
+                      match = re.match(r'from\s+([\w\.]+)\s+import', original_line)
                       if match:
                           module = match.group(1)
+                          base_module = module.split('.')[0]
                           
-                          # Fix local module paths
-                          if module in available_locals:
-                              pass  # Keep as is
-                          elif f'src.{module}' in available_locals:
-                              line = line.replace(f'from {module}', f'from src.{module}')
-                          elif module not in available_externals:
-                              # Comment out unavailable imports
-                              line = f"# {line}  # Module not available"
+                          # Validate against actual modules
+                          if module in actual_modules or base_module in actual_modules:
+                              fixed_lines.append(line)  # Keep valid import
+                          elif module in available_externals or base_module in available_externals:
+                              fixed_lines.append(line)  # Keep external import
+                          else:
+                              # Comment out invalid import
+                              fixed_lines.append(f"# {line}  # Module '{module}' does not exist")
+                              print(f"🚫 Blocked invalid import: {module}")
+                      else:
+                          fixed_lines.append(line)
                   
-                  # Add essential imports if missing
-                  if line.strip().startswith('def test_') and 'pytest' not in '\n'.join(fixed_lines):
-                      if 'import pytest' not in imports_added:
-                          fixed_lines.insert(0, 'import pytest')
-                          imports_added.add('import pytest')
+                  elif original_line.startswith('import '):
+                      match = re.match(r'import\s+([\w\.]+)', original_line)
+                      if match:
+                          module = match.group(1).split('.')[0]
+                          
+                          # Validate against actual modules or externals
+                          if module in actual_modules or module in available_externals or module in ['pytest', 'os', 'sys', 'json']:
+                              fixed_lines.append(line)  # Keep valid import
+                          else:
+                              # Comment out invalid import
+                              fixed_lines.append(f"# {line}  # Module '{module}' does not exist")
+                              print(f"🚫 Blocked invalid import: {module}")
+                      else:
+                          fixed_lines.append(line)
                   
-                  fixed_lines.append(line)
+                  else:
+                      fixed_lines.append(line)
+                      
+                      # Add essential imports based on usage
+                      if 'pytest.raises' in original_line and 'import pytest' not in essential_imports:
+                          essential_imports.add('import pytest')
+                      if '@patch(' in original_line or 'patch(' in original_line:
+                          essential_imports.add('from unittest.mock import patch, Mock')
+              
+              # Add essential imports at the top
+              if essential_imports:
+                  import_lines = sorted(list(essential_imports))
+                  for imp in reversed(import_lines):
+                      fixed_lines.insert(0, imp)
+                      print(f"✅ Added essential import: {imp}")
               
               return '\n'.join(fixed_lines)
           
           # Load enhanced context
-          with open('ci_artifacts/enhanced_context.json', 'r') as f:
+          with open('ci_artifacts/enhanced_context_v2.json', 'r') as f:
               context = json.load(f)
           
           print(f"🧠 Loaded context for {len(context['files'])} files")
           print(f"🔧 Project uses: {', '.join(context['project_structure']['framework'])}")
+          print(f"📋 Actual modules available: {len(context['actual_modules'])}")
           
           # Create tests directory
-          os.makedirs('tests/generated_by_llm', exist_ok=True)
+          os.makedirs('tests/generated_by_llm_v2', exist_ok=True)
           
           # Generate tests for each file
-          prompt_template = create_enhanced_prompt()
           generated_count = 0
           
           for file_data in context['files']:
@@ -479,45 +549,35 @@ jobs:
               
               print(f"🧪 Generating tests for {file_path}...")
               
-              # Create comprehensive prompt with context
+              # Create comprehensive prompt with strict context
+              prompt_template = create_enhanced_prompt_v2(context)
               full_prompt = f"""{prompt_template}
-          
-          PROJECT CONTEXT:
-          - Framework: {', '.join(context['project_structure']['framework'])}
-          - Has src/ dir: {context['project_structure']['has_src_dir']}
-          - Available local imports: {', '.join(context['available_imports']['local'][:10])}
-          - Available external imports: {', '.join(context['available_imports']['external'][:10])}
-          
-          TESTING GUIDELINES:
-          {chr(10).join(f"- {rule}" for rule in context['testing_guidelines']['import_rules'])}
-          
-          EXAMPLE PATTERNS:
-          {chr(10).join(context['universal_test_examples'])}
           
           TARGET FILE: {file_path}
           CODE TO TEST:
           ```python
-          {file_content[:8000]}
+          {file_content[:6000]}
           ```
           
-          Generate comprehensive pytest tests:"""
+          Generate comprehensive pytest tests with ONLY valid imports:"""
               
               # Call LLM
               llm_response = call_ollama_api(full_prompt)
               test_code = extract_and_validate_code(llm_response)
               
               if test_code:
-                  # Validate and fix imports
-                  fixed_code = validate_and_fix_imports(test_code, context)
+                  # Apply strict import validation
+                  validated_code = strict_import_validation(test_code, context)
                   
                   # Create test file
                   module_name = Path(file_path).stem
-                  test_file = f"tests/generated_by_llm/test_{module_name}.py"
+                  test_file = f"tests/generated_by_llm_v2/test_{module_name}_validated.py"
                   
                   header = f'''"""
-          Enhanced test file for {file_path}
-          Generated by: Enhanced Universal LLM Test Generator
+          Enhanced test file for {file_path} - Import Validated
+          Generated by: Enhanced Universal LLM Test Generator v2
           Framework detected: {', '.join(context['project_structure']['framework'])}
+          Strict import validation applied
           """
           
           import pytest
@@ -531,166 +591,48 @@ jobs:
           '''
                   
                   with open(test_file, 'w') as f:
-                      f.write(header + fixed_code)
+                      f.write(header + validated_code)
                   
-                  print(f"✅ Generated {test_file}")
+                  print(f"✅ Generated {test_file} with strict validation")
                   generated_count += 1
               else:
                   print(f"❌ Failed to generate valid tests for {file_path}")
           
-          print(f"🎉 Generated {generated_count} test files")
+          print(f"🎉 Generated {generated_count} validated test files")
           EOF
           
-          python enhanced_test_generator.py
+          python enhanced_test_generator_v2.py
 
-      - name: Fix Import Issues in Generated Tests
+      - name: Run Validated Generated Tests
         run: |
-          echo "🔧 Fixing import issues in generated tests..."
+          echo "🧪 Running validated generated tests..."
           
-          cat > fix_imports.py << 'EOF'
-          import os, re, ast
-          from pathlib import Path
-          
-          def discover_actual_modules():
-              """Find actual modules in the repository"""
-              modules = set()
-              root = Path.cwd()
-              
-              # Find all Python files
-              for py_file in root.rglob("*.py"):
-                  if not any(part.startswith('.') or part in ['__pycache__', 'tests'] for part in py_file.parts):
-                      try:
-                          rel_path = py_file.relative_to(root)
-                          
-                          # Add module name
-                          if rel_path.name != "__init__.py":
-                              module_name = rel_path.stem
-                              modules.add(module_name)
-                              
-                              # Add with path if in subdirectory
-                              if len(rel_path.parts) > 1:
-                                  full_module = ".".join(rel_path.parts[:-1] + (module_name,))
-                                  modules.add(full_module)
-                          
-                          # Add directory modules
-                          if rel_path.name == "__init__.py" and len(rel_path.parts) > 1:
-                              dir_module = ".".join(rel_path.parts[:-1])
-                              modules.add(dir_module)
-                      except:
-                          continue
-              
-              print(f"🔍 Found actual modules: {sorted(list(modules))}")
-              return modules
-          
-          def fix_test_imports(test_file, actual_modules):
-              """Fix imports in a test file"""
-              print(f"🔧 Fixing imports in {test_file}")
-              
-              try:
-                  with open(test_file, 'r') as f:
-                      content = f.read()
-              except:
-                  return False
-              
-              lines = content.split('\n')
-              fixed_lines = []
-              fixes_applied = []
-              
-              for line in lines:
-                  original = line.strip()
-                  
-                  # Check for problematic imports
-                  if original.startswith('from ') and ' import ' in original:
-                      match = re.search(r'from\s+([\w\.]+)', original)
-                      if match:
-                          module = match.group(1)
-                          
-                          # Check for known problematic patterns
-                          if 'src.ui' in module and 'ui' not in actual_modules:
-                              fixed_lines.append(f"# {line}  # FIXED: src.ui doesn't exist")
-                              fixes_applied.append(f"Blocked non-existent import: {module}")
-                              continue
-                          elif module not in actual_modules and '.' in module:
-                              base_module = module.split('.')[0]
-                              if base_module not in actual_modules:
-                                  # Check if it's a standard library import
-                                  stdlib_modules = {'os', 'sys', 'json', 'unittest', 'pytest', 'mock', 'datetime', 'requests'}
-                                  if base_module not in stdlib_modules:
-                                      fixed_lines.append(f"# {line}  # FIXED: Module {module} not found")
-                                      fixes_applied.append(f"Blocked unknown import: {module}")
-                                      continue
-                  
-                  fixed_lines.append(line)
-              
-              # Add essential imports if missing
-              fixed_content = '\n'.join(fixed_lines)
-              if 'pytest.raises' in fixed_content and 'import pytest' not in fixed_content:
-                  fixed_lines.insert(0, 'import pytest')
-                  fixes_applied.append("Added missing pytest import")
-              
-              if '@patch' in fixed_content and 'from unittest.mock import' not in fixed_content:
-                  fixed_lines.insert(0, 'from unittest.mock import patch, Mock')
-                  fixes_applied.append("Added missing mock imports")
-              
-              # Write fixed content
-              try:
-                  with open(test_file, 'w') as f:
-                      f.write('\n'.join(fixed_lines))
-                  
-                  if fixes_applied:
-                      print(f"  ✅ Applied fixes: {fixes_applied}")
-                  else:
-                      print(f"  ✓ No fixes needed")
-                  
-                  return True
-              except Exception as e:
-                  print(f"  ❌ Error writing file: {e}")
-                  return False
-          
-          def main():
-              actual_modules = discover_actual_modules()
-              
-              # Fix all generated test files
-              test_dir = Path("tests/generated_by_llm")
-              if test_dir.exists():
-                  test_files = list(test_dir.glob("*.py"))
-                  print(f"📁 Found {len(test_files)} test files to fix")
-                  
-                  for test_file in test_files:
-                      fix_test_imports(test_file, actual_modules)
-                  
-                  print("🎉 Import fixing complete")
-              else:
-                  print("⚠️ No test directory found")
-          
-          if __name__ == "__main__":
-              main()
-          EOF
-          
-          python fix_imports.py
-
-      - name: Run Generated Tests (Fixed Imports)
-        run: |
-          echo "🧪 Running import-fixed generated tests..."
-          
-          if [ -d "tests/generated_by_llm" ] && [ "$(ls -A tests/generated_by_llm)" ]; then
-            echo "📁 Found generated tests:"
-            ls -la tests/generated_by_llm/
+          # Run both old and new tests for comparison
+          if [ -d "tests/generated_by_llm_v2" ] && [ "$(ls -A tests/generated_by_llm_v2)" ]; then
+            echo "📁 Found v2 validated tests:"
+            ls -la tests/generated_by_llm_v2/
             
-            echo "🔍 Running tests with verbose output..."
-            python -m pytest tests/generated_by_llm/ -v --tb=short --no-header || true
+            echo "🔍 Running v2 tests with verbose output..."
+            python -m pytest tests/generated_by_llm_v2/ -v --tb=short --no-header -x || true
             
-            echo "📊 Test results summary completed"
+            echo "📊 V2 test results completed"
           else
-            echo "⚠️ No generated tests found"
+            echo "⚠️ No v2 validated tests found"
+          fi
+          
+          echo ""
+          echo "🔄 For comparison, trying original tests (expected to have import issues):"
+          if [ -d "tests/generated_by_llm" ]; then
+            python -m pytest tests/generated_by_llm/ -v --tb=line --no-header --maxfail=3 || true
           fi
 
-      - name: Upload Test Results
+      - name: Upload Enhanced Test Results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: enhanced-test-results
+          name: enhanced-test-results-v2
           path: |
+            tests/generated_by_llm_v2/
             tests/generated_by_llm/
             ci_artifacts/
           retention-days: 7
