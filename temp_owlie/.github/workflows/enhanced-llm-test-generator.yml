@@ -1,4 +1,4 @@
-name: Enhanced LLM Test Generator - Universal (USING DEDICATED FILES)
+name: Enhanced LLM Test Generator - Universal (FIXED)
 
 on:
   workflow_dispatch:
@@ -372,62 +372,159 @@ jobs:
           
           echo "✅ Downloaded professional components"
 
-      - name: Generate Tests Using Professional Python Files
+      - name: Generate Tests Using Direct LLM Calls
         run: |
-          echo "🚀 Using Professional EnhancedTestGenerator class..."
+          echo "🚀 Generating tests with direct LLM integration..."
           
-          cat > run_professional_generator.py << 'EOF'
-          import sys
-          sys.path.insert(0, '.')
-          from tools.enhanced_test_generator import EnhancedTestGenerator
-          
-          import json
+          cat > simple_test_generator.py << 'EOF'
+          import json, requests, os, re, ast
           from pathlib import Path
           
-          def main():
-              print("🚀 Using Professional EnhancedTestGenerator class...")
+          def call_ollama_api(prompt, model="qwen2.5-coder:1.5b"):
+              """Call Ollama API to generate test code"""
+              url = "http://localhost:11434/api/generate"
+              payload = {
+                  "model": model,
+                  "prompt": prompt,
+                  "stream": False,
+                  "options": {
+                      "temperature": 0.1,
+                      "top_p": 0.9,
+                      "num_predict": 2000
+                  }
+              }
               
-              # Initialize the professional generator
-              generator = EnhancedTestGenerator(project_root=".")
-              
-              # Set paths for universal compatibility
-              generator.bundle_path = Path("ci_artifacts/enhanced_context.json")
-              generator.out_dir = Path("tests/generated_by_llm")
-              generator.out_dir.mkdir(parents=True, exist_ok=True)
-              
-              print("✅ Professional generator initialized")
-              
-              # Use the professional generator's methods
               try:
-                  generated_files = generator.generate_all_tests()
-                  print(f"🎉 Professional generation complete: {len(generated_files)} files")
+                  response = requests.post(url, json=payload, timeout=180)
+                  response.raise_for_status()
+                  return response.json().get('response', '')
               except Exception as e:
-                  print(f"❌ Error in professional generator: {e}")
-                  # Fallback to basic generation
-                  try:
-                      with open(generator.bundle_path, 'r') as f:
-                          context = json.load(f)
+                  print(f"❌ Ollama API error: {e}")
+                  return None
+          
+          def extract_code_from_response(llm_response):
+              """Extract Python code from LLM response"""
+              if not llm_response:
+                  return None
+              
+              # Try to extract code blocks
+              patterns = [
+                  r'```python\s*\n(.*?)\n```',
+                  r'```\s*\n(.*?)\n```'
+              ]
+              
+              for pattern in patterns:
+                  matches = re.findall(pattern, llm_response, re.DOTALL)
+                  if matches:
+                      code = matches[0].strip()
+                      # Basic validation
+                      try:
+                          ast.parse(code)
+                          if 'def test_' in code:
+                              return code
+                      except SyntaxError:
+                          continue
+              
+              return None
+          
+          def main():
+              print("🎯 Starting direct LLM test generation...")
+              
+              # Load context
+              try:
+                  with open('ci_artifacts/enhanced_context.json', 'r') as f:
+                      context = json.load(f)
+                  print(f"📊 Loaded context with {len(context.get('files', []))} files")
+              except Exception as e:
+                  print(f"❌ Error loading context: {e}")
+                  return
+              
+              # Create output directory
+              output_dir = Path("tests/generated_by_llm")
+              output_dir.mkdir(parents=True, exist_ok=True)
+              
+              generated_count = 0
+              
+              # Process each file
+              for file_data in context.get('files', []):
+                  file_path = file_data.get('path', '')
+                  file_content = file_data.get('full_text', '')
+                  
+                  if not file_content or len(file_content.strip()) < 100:
+                      print(f"⏭️ Skipping {file_path} - too small")
+                      continue
+                  
+                  print(f"🧪 Generating tests for {file_path}...")
+                  
+                  # Create focused prompt
+                  prompt = f"""You are a Python test engineer. Generate comprehensive pytest tests.
+          
+          REQUIREMENTS:
+          1. Generate ONLY Python code in ```python``` blocks
+          2. Use pytest framework with proper assertions
+          3. Include imports: pytest, unittest.mock
+          4. Test real functionality, not placeholders
+          5. Handle edge cases and exceptions
+          
+          TARGET FILE: {file_path}
+          CODE TO TEST:
+          ```python
+          {file_content[:8000]}
+          ```
+          
+          Generate comprehensive pytest tests now:"""
+                  
+                  # Call LLM
+                  llm_response = call_ollama_api(prompt)
+                  test_code = extract_code_from_response(llm_response)
+                  
+                  if test_code:
+                      # Create test file
+                      module_name = Path(file_path).stem
+                      test_file_path = output_dir / f"test_{module_name}.py"
                       
-                      generated_count = 0
-                      for file_data in context.get('files', []):
-                          if len(file_data.get('full_text', '')) > 100:
-                              try:
-                                  test_file = generator.generate_tests_for_module(file_data['path'])
-                                  if test_file:
-                                      generated_count += 1
-                                      print(f"✅ Generated: {test_file}")
-                              except Exception as e2:
-                                  print(f"⚠️ Skipped {file_data['path']}: {e2}")
+                      # Add header
+                      header = f'''"""
+          Generated test file for {file_path}
+          Created by: Enhanced LLM Test Generator
+          """
+          
+          import pytest
+          from unittest.mock import patch, Mock, MagicMock
+          import sys
+          import os
+          
+          # Add project root to Python path
+          sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+          
+          '''
                       
-                      print(f"🎉 Fallback generation complete: {generated_count} files")
-                  except Exception as e3:
-                      print(f"❌ Fallback also failed: {e3}")
+                      # Write test file
+                      try:
+                          with open(test_file_path, 'w') as f:
+                              f.write(header + test_code)
+                          
+                          print(f"✅ Generated: {test_file_path}")
+                          generated_count += 1
+                      except Exception as e:
+                          print(f"❌ Error writing {test_file_path}: {e}")
+                  else:
+                      print(f"⚠️ Failed to generate valid test code for {file_path}")
+              
+              print(f"\n🎉 Generation complete: {generated_count} test files created")
+              
+              # List generated files
+              if output_dir.exists():
+                  test_files = list(output_dir.glob("*.py"))
+                  print(f"📁 Generated files:")
+                  for tf in test_files:
+                      print(f"   - {tf.name}")
           
           if __name__ == "__main__":
               main()
           EOF
           
-          python run_professional_generator.py
+          python simple_test_generator.py
 
       - name: Fix Import Issues in Generated Tests
         run: |
