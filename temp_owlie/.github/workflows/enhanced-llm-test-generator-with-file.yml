@@ -1,0 +1,299 @@
+name: Enhanced LLM Test Generator - Using Dedicated Python File
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_files:
+        description: 'Specific files to test (comma-separated)'
+        required: false
+        type: string
+      use_enhanced_generator:
+        description: 'Use enhanced test generator with better quality'
+        required: false
+        type: boolean
+        default: true
+  push:
+    branches: [ main, master ]
+    paths: ['**.py']
+
+jobs:
+  enhanced-test-generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest pytest-cov coverage
+          
+          # Install repo-specific dependencies
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Download Enhanced Test Generator
+        run: |
+          echo "📥 Downloading enhanced test generator from genai-test-platform..."
+          
+          # Create the tools directory
+          mkdir -p tools
+          mkdir -p llm_agent
+          mkdir -p ci_artifacts
+          
+          # Download the enhanced test generator
+          curl -L -o tools/enhanced_test_generator.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/tools/enhanced_test_generator.py"
+          
+          # Download the context builder for universal analysis
+          curl -L -o llm_agent/context_builder.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/context_builder.py"
+          
+          # Download universal test validator
+          curl -L -o llm_agent/universal_test_validator.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/universal_test_validator.py"
+          
+          # Download prompt template
+          curl -L -o llm_agent/prompt_template.txt \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/prompt_template.txt"
+          
+          # Download code analyzer
+          curl -L -o llm_agent/code_analyzer.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/code_analyzer.py"
+          
+          # Create __init__.py files
+          touch llm_agent/__init__.py
+          touch tools/__init__.py
+          
+          echo "✅ Downloaded enhanced components successfully"
+          ls -la tools/
+          ls -la llm_agent/
+
+      - name: Create Enhanced Context
+        run: |
+          echo "🧠 Building enhanced context with universal analyzer..."
+          
+          cat > create_context.py << 'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          from llm_agent.context_builder import UniversalContextAnalyzer
+          import json
+          from pathlib import Path
+          
+          # Initialize analyzer
+          analyzer = UniversalContextAnalyzer(Path.cwd())
+          
+          # Build comprehensive context
+          context = {
+              'files': [],
+              'project_structure': analyzer.analyze_project_structure(),
+              'available_imports': analyzer.scan_all_imports(),
+              'actual_modules': analyzer.discover_actual_modules(),
+              'testing_guidelines': analyzer.generate_testing_guidelines(),
+              'universal_test_examples': analyzer.generate_universal_test_examples()
+          }
+          
+          # Get Python files to analyze
+          python_files = list(analyzer._safe_find_python_files())
+          print(f'📁 Found {len(python_files)} Python files to analyze')
+          
+          for py_file in python_files[:20]:  # Limit for CI
+              try:
+                  rel_path = py_file.relative_to(Path.cwd())
+                  content = py_file.read_text(encoding='utf-8', errors='ignore')[:15000]
+                  
+                  file_data = {
+                      'path': str(rel_path),
+                      'full_text': content,
+                      'size': len(content),
+                      'functions': analyzer.extract_function_signatures(content),
+                      'imports': analyzer.extract_imports_from_code(content)
+                  }
+                  context['files'].append(file_data)
+              except Exception as e:
+                  print(f'⚠️ Skipping {py_file}: {e}')
+          
+          # Save context
+          with open('ci_artifacts/enhanced_context.json', 'w') as f:
+              json.dump(context, f, indent=2)
+          
+          print(f'✅ Enhanced context created:')
+          print(f'   - Files analyzed: {len(context["files"])}')
+          print(f'   - Framework detected: {context["project_structure"]["framework"]}')
+          print(f'   - Available modules: {len(context["actual_modules"])}')
+          EOF
+          
+          python create_context.py
+
+      - name: Install Ollama
+        run: |
+          echo "🤖 Installing Ollama..."
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 10
+          echo "📦 Pulling Qwen2.5-Coder model..."
+          ollama pull qwen2.5-coder:1.5b
+          ollama list
+
+      - name: Generate Tests with Enhanced Generator
+        run: |
+          echo "🚀 Using Enhanced Test Generator for better quality..."
+          
+          # Create a simple runner script that uses our enhanced generator
+          cat > run_enhanced_generator.py << 'EOF'
+import sys
+import json
+from pathlib import Path
+sys.path.insert(0, '.')
+
+from tools.enhanced_test_generator import EnhancedTestGenerator
+
+def main():
+    print("🔥 Starting Enhanced Test Generation...")
+    
+    # Initialize the enhanced generator
+    generator = EnhancedTestGenerator(project_root=".")
+    
+    # Override some settings for universal compatibility
+    generator.bundle_path = Path("ci_artifacts/enhanced_context.json")
+    generator.out_dir = Path("tests/generated_by_llm")
+    generator.out_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Load context
+    with open(generator.bundle_path, 'r') as f:
+        context = json.load(f)
+    
+    print(f"📊 Context loaded: {len(context['files'])} files")
+    
+    # Generate tests for each file
+    generated_count = 0
+    for file_data in context['files']:
+        if len(file_data.get('full_text', '')) < 100:
+            continue
+            
+        print(f"🧪 Generating tests for {file_data['path']}...")
+        
+        try:
+            # Use the enhanced generator's module-specific generation
+            test_file = generator.generate_tests_for_module(file_data['path'])
+            if test_file:
+                generated_count += 1
+                print(f"✅ Generated: {test_file}")
+        except Exception as e:
+            print(f"⚠️ Error generating tests for {file_data['path']}: {e}")
+    
+    print(f"🎉 Enhanced generation complete: {generated_count} test files created")
+
+if __name__ == "__main__":
+    main()
+EOF
+          
+          python run_enhanced_generator.py
+
+      - name: Apply Universal Test Validation
+        run: |
+          echo "🔧 Applying universal test validation and import fixing..."
+          
+          cat > validate_tests.py << 'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          from llm_agent.universal_test_validator import UniversalTestValidator
+          from pathlib import Path
+          import json
+          
+          # Load context for validation
+          try:
+              with open('ci_artifacts/enhanced_context.json', 'r') as f:
+                  context = json.load(f)
+          except FileNotFoundError:
+              print("⚠️ Context file not found, using basic validation")
+              context = {'actual_modules': {}, 'available_imports': {'local': [], 'external': []}}
+          
+          # Initialize validator
+          validator = UniversalTestValidator(context)
+          
+          # Validate all generated test files
+          test_dir = Path('tests/generated_by_llm')
+          if test_dir.exists():
+              test_files = list(test_dir.glob('*.py'))
+              print(f'🔍 Validating {len(test_files)} test files...')
+              
+              for test_file in test_files:
+                  try:
+                      print(f'🔧 Validating {test_file.name}...')
+                      validator.validate_and_fix_test(test_file)
+                      print(f'✅ Validated {test_file.name}')
+                  except Exception as e:
+                      print(f'⚠️ Validation error for {test_file.name}: {e}')
+              
+              print('🎉 Universal validation complete!')
+          else:
+              print('⚠️ No test files found for validation')
+          EOF
+          
+          python validate_tests.py
+
+      - name: Run Enhanced Generated Tests
+        run: |
+          echo "🧪 Running enhanced generated tests..."
+          
+          if [ -d "tests/generated_by_llm" ] && [ "$(ls -A tests/generated_by_llm)" ]; then
+            echo "📁 Found enhanced generated tests:"
+            ls -la tests/generated_by_llm/
+            
+            echo "🔍 Running tests with verbose output..."
+            python -m pytest tests/generated_by_llm/ -v --tb=short --no-header || true
+            
+            echo "📊 Enhanced test results completed"
+          else
+            echo "⚠️ No enhanced generated tests found"
+          fi
+
+      - name: Upload Enhanced Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: enhanced-test-results-from-file
+          path: |
+            tests/generated_by_llm/
+            ci_artifacts/
+            tools/
+            llm_agent/
+          retention-days: 7
+          
+      - name: Create Enhanced Summary
+        run: |
+          echo "## 🚀 Enhanced LLM Test Generation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Generated using dedicated Python files for better code quality:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Components Used:" >> $GITHUB_STEP_SUMMARY
+          echo "- 🛠️ **Enhanced Test Generator**: \`tools/enhanced_test_generator.py\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧠 **Universal Context Analyzer**: \`llm_agent/context_builder.py\`" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **Universal Test Validator**: \`llm_agent/universal_test_validator.py\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 **Code Analyzer**: \`llm_agent/code_analyzer.py\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Benefits of Using Dedicated Files:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✨ **Better Code Quality**: Proper class structure, error handling, and modularity" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔧 **Maintainability**: Easy to update, debug, and extend functionality" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧪 **Advanced Features**: Import validation, context analysis, framework detection" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 **Better Debugging**: Proper logging, error handling, and diagnostics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -d "tests/generated_by_llm" ]; then
+            echo "### Generated Files:" >> $GITHUB_STEP_SUMMARY
+            for file in tests/generated_by_llm/*.py; do
+              if [ -f "$file" ]; then
+                echo "- 📄 \`$(basename "$file")\`" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+          fi

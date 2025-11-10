@@ -1,4 +1,4 @@
-name: Enhanced LLM Test Generator - Universal (WITH IMPORT FIX)
+name: Enhanced LLM Test Generator - Universal (USING DEDICATED FILES)
 
 on:
   workflow_dispatch:
@@ -347,201 +347,87 @@ jobs:
           ollama pull qwen2.5-coder:1.5b
           ollama list
 
-      - name: Generate Enhanced Tests with Validation
+      - name: Download Enhanced Test Generator Files
         run: |
-          cat > enhanced_test_generator.py << 'EOF'
-          import json, requests, os, re, ast
+          echo "📥 Downloading professional test generator components..."
+          
+          # Create directories
+          mkdir -p tools llm_agent
+          
+          # Download your high-quality dedicated Python files
+          curl -L -o tools/enhanced_test_generator.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/tools/enhanced_test_generator.py"
+          
+          curl -L -o llm_agent/context_builder.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/context_builder.py"
+          
+          curl -L -o llm_agent/code_analyzer.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/code_analyzer.py"
+          
+          curl -L -o llm_agent/prompt_template.txt \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/prompt_template.txt"
+          
+          # Create __init__.py files
+          touch llm_agent/__init__.py tools/__init__.py
+          
+          echo "✅ Downloaded professional components"
+
+      - name: Generate Tests Using Professional Python Files
+        run: |
+          echo "🚀 Using Professional EnhancedTestGenerator class..."
+          
+          cat > run_professional_generator.py << 'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          from tools.enhanced_test_generator import EnhancedTestGenerator
+          
+          import json
           from pathlib import Path
           
-          def create_enhanced_prompt():
-              return """You are a senior Python test engineer. Create comprehensive pytest tests.
-          
-          CRITICAL REQUIREMENTS:
-          1. ONLY use imports from the available_imports list provided
-          2. Follow the project_structure for correct import paths
-          3. Use the testing_guidelines and examples provided
-          4. Generate syntactically correct Python code only
-          5. Test real functionality, not placeholder code
-          
-          IMPORT STRATEGY:
-          - For local modules: Check project_structure and use correct paths
-          - For external modules: Only use what's in available_imports['external']
-          - Always include: import pytest, from unittest.mock import patch, Mock
-          
-          OUTPUT: Only Python code in ```python ``` blocks."""
-          
-          def call_ollama_api(prompt, model="qwen2.5-coder:1.5b"):
-              url = "http://localhost:11434/api/generate"
-              payload = {
-                  "model": model,
-                  "prompt": prompt,
-                  "stream": False,
-                  "options": {
-                      "temperature": 0.1,
-                      "top_p": 0.9,
-                      "num_predict": 2000
-                  }
-              }
+          def main():
+              print("🚀 Using Professional EnhancedTestGenerator class...")
               
+              # Initialize the professional generator
+              generator = EnhancedTestGenerator(project_root=".")
+              
+              # Set paths for universal compatibility
+              generator.bundle_path = Path("ci_artifacts/enhanced_context.json")
+              generator.out_dir = Path("tests/generated_by_llm")
+              generator.out_dir.mkdir(parents=True, exist_ok=True)
+              
+              print("✅ Professional generator initialized")
+              
+              # Use the professional generator's methods
               try:
-                  response = requests.post(url, json=payload, timeout=180)
-                  response.raise_for_status()
-                  return response.json().get('response', '')
+                  generated_files = generator.generate_all_tests()
+                  print(f"🎉 Professional generation complete: {len(generated_files)} files")
               except Exception as e:
-                  print(f"❌ Ollama API error: {e}")
-                  return None
-          
-          def extract_and_validate_code(llm_response):
-              """Extract code and perform basic validation"""
-              if not llm_response:
-                  return None
-              
-              # Extract Python code blocks
-              code_patterns = [
-                  r'```python\s*\n(.*?)\n```',
-                  r'```\s*\n(.*?)\n```'
-              ]
-              
-              for pattern in code_patterns:
-                  matches = re.findall(pattern, llm_response, re.DOTALL)
-                  if matches:
-                      code = matches[0].strip()
+                  print(f"❌ Error in professional generator: {e}")
+                  # Fallback to basic generation
+                  try:
+                      with open(generator.bundle_path, 'r') as f:
+                          context = json.load(f)
                       
-                      # Basic validation
-                      try:
-                          ast.parse(code)  # Check syntax
-                          if 'def test_' in code:  # Has test functions
-                              return code
-                      except SyntaxError as e:
-                          print(f"⚠️ Syntax error in generated code: {e}")
-                          continue
-              
-              return None
+                      generated_count = 0
+                      for file_data in context.get('files', []):
+                          if len(file_data.get('full_text', '')) > 100:
+                              try:
+                                  test_file = generator.generate_tests_for_module(file_data['path'])
+                                  if test_file:
+                                      generated_count += 1
+                                      print(f"✅ Generated: {test_file}")
+                              except Exception as e2:
+                                  print(f"⚠️ Skipped {file_data['path']}: {e2}")
+                      
+                      print(f"🎉 Fallback generation complete: {generated_count} files")
+                  except Exception as e3:
+                      print(f"❌ Fallback also failed: {e3}")
           
-          def validate_and_fix_imports(code, context):
-              """Validate and fix import issues"""
-              lines = code.split('\n')
-              fixed_lines = []
-              available_locals = context.get('available_imports', {}).get('local', [])
-              available_externals = context.get('available_imports', {}).get('external', [])
-              
-              imports_added = set()
-              
-              for line in lines:
-                  original_line = line
-                  
-                  # Fix common import issues
-                  if line.strip().startswith('from ') and ' import ' in line:
-                      # Extract module name
-                      match = re.match(r'from\s+(\w+)\s+import', line.strip())
-                      if match:
-                          module = match.group(1)
-                          
-                          # Fix local module paths
-                          if module in available_locals:
-                              pass  # Keep as is
-                          elif f'src.{module}' in available_locals:
-                              line = line.replace(f'from {module}', f'from src.{module}')
-                          elif module not in available_externals:
-                              # Comment out unavailable imports
-                              line = f"# {line}  # Module not available"
-                  
-                  # Add essential imports if missing
-                  if line.strip().startswith('def test_') and 'pytest' not in '\n'.join(fixed_lines):
-                      if 'import pytest' not in imports_added:
-                          fixed_lines.insert(0, 'import pytest')
-                          imports_added.add('import pytest')
-                  
-                  fixed_lines.append(line)
-              
-              return '\n'.join(fixed_lines)
-          
-          # Load enhanced context
-          with open('ci_artifacts/enhanced_context.json', 'r') as f:
-              context = json.load(f)
-          
-          print(f"🧠 Loaded context for {len(context['files'])} files")
-          print(f"🔧 Project uses: {', '.join(context['project_structure']['framework'])}")
-          
-          # Create tests directory
-          os.makedirs('tests/generated_by_llm', exist_ok=True)
-          
-          # Generate tests for each file
-          prompt_template = create_enhanced_prompt()
-          generated_count = 0
-          
-          for file_data in context['files']:
-              file_path = file_data['path']
-              file_content = file_data.get('full_text', '')
-              
-              if not file_content or len(file_content) < 50:
-                  continue
-              
-              print(f"🧪 Generating tests for {file_path}...")
-              
-              # Create comprehensive prompt with context
-              full_prompt = f"""{prompt_template}
-          
-          PROJECT CONTEXT:
-          - Framework: {', '.join(context['project_structure']['framework'])}
-          - Has src/ dir: {context['project_structure']['has_src_dir']}
-          - Available local imports: {', '.join(context['available_imports']['local'][:10])}
-          - Available external imports: {', '.join(context['available_imports']['external'][:10])}
-          
-          TESTING GUIDELINES:
-          {chr(10).join(f"- {rule}" for rule in context['testing_guidelines']['import_rules'])}
-          
-          EXAMPLE PATTERNS:
-          {chr(10).join(context['universal_test_examples'])}
-          
-          TARGET FILE: {file_path}
-          CODE TO TEST:
-          ```python
-          {file_content[:8000]}
-          ```
-          
-          Generate comprehensive pytest tests:"""
-              
-              # Call LLM
-              llm_response = call_ollama_api(full_prompt)
-              test_code = extract_and_validate_code(llm_response)
-              
-              if test_code:
-                  # Validate and fix imports
-                  fixed_code = validate_and_fix_imports(test_code, context)
-                  
-                  # Create test file
-                  module_name = Path(file_path).stem
-                  test_file = f"tests/generated_by_llm/test_{module_name}.py"
-                  
-                  header = f'''"""
-          Enhanced test file for {file_path}
-          Generated by: Enhanced Universal LLM Test Generator
-          Framework detected: {', '.join(context['project_structure']['framework'])}
-          """
-          
-          import pytest
-          from unittest.mock import patch, Mock, MagicMock
-          import sys
-          import os
-          
-          # Add project root to path for imports
-          sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-          
-          '''
-                  
-                  with open(test_file, 'w') as f:
-                      f.write(header + fixed_code)
-                  
-                  print(f"✅ Generated {test_file}")
-                  generated_count += 1
-              else:
-                  print(f"❌ Failed to generate valid tests for {file_path}")
-          
-          print(f"🎉 Generated {generated_count} test files")
+          if __name__ == "__main__":
+              main()
           EOF
           
-          python enhanced_test_generator.py
+          python run_professional_generator.py
 
       - name: Fix Import Issues in Generated Tests
         run: |
