@@ -1,0 +1,205 @@
+name: Enhanced LLM Test Generator - Using Dedicated Python Files
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_files:
+        description: 'Specific files to test (comma-separated)'
+        required: false
+        type: string
+      use_enhanced_generator:
+        description: 'Use enhanced test generator with better quality'
+        required: false
+        type: boolean
+        default: true
+  push:
+    branches: [ main, master ]
+    paths: ['**.py']
+
+jobs:
+  enhanced-test-generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest pytest-cov coverage
+          
+          # Install repo-specific dependencies
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Download Enhanced Test Components
+        run: |
+          echo "📥 Downloading enhanced test generator components..."
+          
+          # Create directories
+          mkdir -p tools llm_agent ci_artifacts
+          
+          # Download the enhanced test generator (your existing high-quality file)
+          curl -L -o tools/enhanced_test_generator.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/tools/enhanced_test_generator.py"
+          
+          # Download context builder for universal analysis
+          curl -L -o llm_agent/context_builder.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/context_builder.py"
+          
+          # Download other essential components
+          curl -L -o llm_agent/code_analyzer.py \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/code_analyzer.py"
+          
+          curl -L -o llm_agent/prompt_template.txt \
+            "https://raw.githubusercontent.com/imcalledgautam/genai-test-platform/main/llm_agent/prompt_template.txt"
+          
+          # Create __init__.py files
+          touch llm_agent/__init__.py tools/__init__.py
+          
+          echo "✅ Downloaded enhanced components"
+          ls -la tools/ llm_agent/
+
+      - name: Install Ollama
+        run: |
+          echo "🤖 Installing Ollama..."
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 10
+          echo "📦 Pulling Qwen2.5-Coder model..."
+          ollama pull qwen2.5-coder:1.5b
+          ollama list
+
+      - name: Create Context Bundle
+        run: |
+          echo "🧠 Creating context bundle..."
+          
+          # Create a context builder script
+          cat > build_context.py << 'EOF'
+          import json
+          import os
+          from pathlib import Path
+          
+          def create_basic_context():
+              """Create a basic context bundle for any repository"""
+              root = Path.cwd()
+              
+              # Find Python files
+              python_files = []
+              for py_file in root.rglob("*.py"):
+                  if not any(part.startswith('.') or part in ['__pycache__', 'venv', 'env'] for part in py_file.parts):
+                      try:
+                          rel_path = py_file.relative_to(root)
+                          content = py_file.read_text(encoding='utf-8', errors='ignore')[:15000]
+                          
+                          if len(content.strip()) > 50:  # Skip empty/tiny files
+                              python_files.append({
+                                  'path': str(rel_path),
+                                  'full_text': content,
+                                  'size': len(content)
+                              })
+                      except Exception as e:
+                          print(f"⚠️ Skipping {py_file}: {e}")
+              
+              # Create context bundle
+              context = {
+                  'files': python_files,
+                  'metadata': {
+                      'total_files': len(python_files),
+                      'project_root': str(root)
+                  }
+              }
+              
+              # Save context
+              with open('ci_artifacts/context_bundle.json', 'w') as f:
+                  json.dump(context, f, indent=2)
+              
+              print(f"✅ Context created with {len(python_files)} files")
+              return context
+          
+          if __name__ == "__main__":
+              create_basic_context()
+          EOF
+          
+          python build_context.py
+
+      - name: Generate Tests with Enhanced Generator
+        run: |
+          echo "🚀 Using Enhanced Test Generator..."
+          
+          # Modify the enhanced generator to work with our context
+          python tools/enhanced_test_generator.py
+          
+          echo "✅ Enhanced test generation completed"
+
+      - name: Run Generated Tests
+        run: |
+          echo "🧪 Running generated tests..."
+          
+          if [ -d "tests/generated" ] && [ "$(ls -A tests/generated)" ]; then
+            echo "📁 Found generated tests:"
+            ls -la tests/generated/
+            
+            echo "🔍 Running tests with verbose output..."
+            python -m pytest tests/generated/ -v --tb=short --no-header || true
+          elif [ -d "tests/generated_by_llm" ] && [ "$(ls -A tests/generated_by_llm)" ]; then
+            echo "📁 Found generated tests in alternative location:"
+            ls -la tests/generated_by_llm/
+            
+            echo "🔍 Running tests with verbose output..."
+            python -m pytest tests/generated_by_llm/ -v --tb=short --no-header || true
+          else
+            echo "⚠️ No generated tests found"
+          fi
+
+      - name: Upload Enhanced Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: enhanced-test-results-dedicated-files
+          path: |
+            tests/generated*/
+            ci_artifacts/
+            tools/
+            llm_agent/
+          retention-days: 7
+          
+      - name: Create Summary
+        run: |
+          echo "## 🚀 Enhanced LLM Test Generation with Dedicated Files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✨ Key Advantages of Using Dedicated Python Files:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. **🛠️ Better Code Quality**: Professional class structure with proper error handling" >> $GITHUB_STEP_SUMMARY
+          echo "2. **🚀 Enhanced Features**: Advanced context analysis, import validation, framework detection" >> $GITHUB_STEP_SUMMARY  
+          echo "3. **🔧 Maintainability**: Easy to debug, update, and extend functionality" >> $GITHUB_STEP_SUMMARY
+          echo "4. **📊 Better Diagnostics**: Comprehensive logging and error reporting" >> $GITHUB_STEP_SUMMARY
+          echo "5. **🎯 Modularity**: Reusable components across different repositories" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📁 Components Used:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Enhanced Test Generator**: \`tools/enhanced_test_generator.py\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Context Builder**: \`llm_agent/context_builder.py\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Code Analyzer**: \`llm_agent/code_analyzer.py\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎉 Results:" >> $GITHUB_STEP_SUMMARY
+          if [ -d "tests/generated" ]; then
+            file_count=$(find tests/generated -name "*.py" -type f | wc -l)
+            echo "- Generated **${file_count}** test files" >> $GITHUB_STEP_SUMMARY
+            echo "- Output directory: \`tests/generated/\`" >> $GITHUB_STEP_SUMMARY
+          elif [ -d "tests/generated_by_llm" ]; then
+            file_count=$(find tests/generated_by_llm -name "*.py" -type f | wc -l)
+            echo "- Generated **${file_count}** test files" >> $GITHUB_STEP_SUMMARY
+            echo "- Output directory: \`tests/generated_by_llm/\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "💡 **Next Steps**: Download the artifacts to review and integrate the generated tests!"
